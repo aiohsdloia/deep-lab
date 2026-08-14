@@ -1,7 +1,7 @@
 // Curated open-source science MCP connectors (P1-2). We do NOT reimplement
 // literature/database access — we one-click provision existing open-source MCP
 // servers (e.g. paper-search-mcp, biomcp) into a shared ISOLATED uv env under
-// app data (the user's Python is untouched), then register them in OpenCode's
+// app data (the user's Python is untouched), then register them in dsh's
 // config. The frontend holds the curated catalog; here we just install a pip
 // package and report the managed interpreter path.
 use std::path::PathBuf;

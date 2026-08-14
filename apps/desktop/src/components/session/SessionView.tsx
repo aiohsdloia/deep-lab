@@ -39,7 +39,6 @@ import { SubagentPane } from "@/components/thread/SubagentPane";
 import { SelectionActions } from "@/components/thread/SelectionActions";
 import { Elapsed } from "@/components/thread/ToolGroup";
 import { Composer } from "@/components/thread/Composer";
-import { GOAL_RESUME_NUDGE, GoalPill } from "@/components/thread/GoalPill";
 import { baseName } from "@/components/thread/WorkspaceChip";
 import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
@@ -485,9 +484,6 @@ export function SessionView({
             >
               {title ?? ""}
             </h1>
-          )}
-          {eid && (
-            <GoalPill sessionId={eid} onResumed={() => void sendPrompt(GOAL_RESUME_NUDGE, sid ?? undefined)} />
           )}
           <div data-tauri-drag-region={asTitlebar || undefined} className="flex-1" />
           {/* Every question the user asked in THIS session, searchable — click

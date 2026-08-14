@@ -8,12 +8,8 @@ export const DSH_VERSION = "0.1.0-rc.6";
 /** dsh web server defaults (`dsh --profile web`). */
 export const DEFAULT_DSH_URL = "http://127.0.0.1:3080";
 
-/** OpenCode server defaults — retained for the legacy OpenCodeClient
- *  (ACP-agent and reference path); DeepLab's primary runtime is dsh. */
-export const DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096";
-
-// ---- Normalized events (OpenCode SSE → app) ----
-// OpenCode emits idempotent "updated" events (full current value), not deltas, so
+// ---- Normalized events (dsh → app) ----
+// dsh emits idempotent "updated" events (full current value), not deltas, so
 // text/tool events carry a stable id and the app upserts by that id.
 
 export interface TextUpdatedEvent {
@@ -73,11 +69,11 @@ export interface SessionRenamedEvent {
   sessionId: string;
   title: string;
 }
-/** The turn's model call failed and the server is retrying it — OpenCode backs
+/** The turn's model call failed and the server is retrying it — dsh backs
  *  off exponentially with NO attempt cap, so without surfacing these the UI
  *  shows a bare "Working…" forever while every attempt fails. */
 /** A user message landed carrying its agent — including the build message
- *  OpenCode injects itself when the plan_exit question is answered Yes. The
+ *  dsh injects itself when the plan_exit question is answered Yes. The
  *  app syncs its per-session agent-mode state from this (never from question
  *  text, which is locale/version-brittle). */
 export interface MessageAgentEvent {
@@ -86,7 +82,7 @@ export interface MessageAgentEvent {
   /** The user message's id, when known — lets the app tag the live message
    *  block so it can later be edited (revert + resend). */
   messageID?: string;
-  /** Agent the user message carries; absent when OpenCode didn't set one. */
+  /** Agent the user message carries; absent when dsh didn't set one. */
   agent?: string;
 }
 
@@ -101,7 +97,7 @@ export interface SessionRetryEvent {
 }
 
 // ---- Interactive requests (the agent asks; the user must answer) ----
-// OpenCode blocks the run until answered. Two kinds: a `question` (pick from
+// dsh blocks the run until answered. Two kinds: a `question` (pick from
 // options) and a `permission` (approve a command / file write / etc.).
 
 export interface QuestionOption {
@@ -162,7 +158,7 @@ export interface CompactedEvent {
   overflow?: boolean;
 }
 
-export type OpenCodeEvent =
+export type RuntimeEvent =
   | TextUpdatedEvent
   | ReasoningUpdatedEvent
   | CompactedEvent
@@ -191,7 +187,7 @@ export interface SessionMeta {
   directory?: string;
   /** Set on subagent sessions: the session whose task tool spawned this one. */
   parentId?: string;
-  /** Epoch ms the session was created / last updated (from OpenCode's `time`).
+  /** Epoch ms the session was created / last updated (from dsh's `time`).
    *  Drives "Updated" timestamps and recency ordering. */
   created?: number;
   updated?: number;
@@ -244,7 +240,7 @@ export interface CommandInfo {
   source?: string;
   /** Agent the command pins, when it does. */
   agent?: string;
-  /** The prompt text the command expands to. OpenCode stores that EXPANSION
+  /** The prompt text the command expands to. dsh stores that EXPANSION
    *  as the user message in history — the template lets the app reverse-map
    *  it back to the "/name" the user actually typed. */
   template?: string;
@@ -253,7 +249,7 @@ export interface CommandInfo {
 /** A message loaded from history (GET /session/:id/message). */
 export interface HistoryMessage {
   role: "user" | "assistant";
-  /** OpenCode's message id — the handle for reverting/editing a user message
+  /** dsh's message id — the handle for reverting/editing a user message
    *  (`POST /session/:id/revert`). Absent only on synthetic/mock messages. */
   id?: string;
   /** Epoch ms when the message finished — unset while it is still streaming.
@@ -291,31 +287,11 @@ export interface HistoryPart {
   };
 }
 
-export interface OpenCodeClientOptions {
-  /** Base URL of a running `opencode serve`, e.g. http://127.0.0.1:4096 */
-  baseUrl?: string;
-  /** Optional OPENCODE_SERVER_PASSWORD (basic auth). */
-  password?: string;
-  username?: string;
-  /** Inject fetch (defaults to global fetch; browser + node both have it). */
-  fetchImpl?: typeof fetch;
-  /** Max time to wait for the SSE handshake before retrying. */
-  connectTimeoutMs?: number;
-  /** Max time to wait for short HTTP requests such as session creation. */
-  requestTimeoutMs?: number;
-  /**
-   * Workspace directory the server should scope skill discovery to. OpenCode
-   * initializes per-directory instances lazily; without this, /api/skill can
-   * return an empty list until something else touches the workspace instance.
-   */
-  directory?: string;
-}
-
 /**
  * A file sent as a real multimodal part of a turn, so a vision-capable model
  * sees the image itself rather than a filename in the prose (#88).
  *
- * `url` MUST be a `data:` URL. OpenCode accepts a `file://` url and answers 204,
+ * `url` MUST be a `data:` URL. dsh accepts a `file://` url and answers 204,
  * then stores no message at all — the turn is silently lost — so the bytes ride
  * in the request.
  */
@@ -328,21 +304,21 @@ export interface PromptFile {
   url: string;
 }
 
-// ---- Provider / model configuration (OpenCode-native, one source of truth) ----
+// ---- Provider / model configuration (dsh-native, one source of truth) ----
 
 export interface ProviderModelInfo {
   id: string;
   name: string;
   /** Reasoning-effort variant names this model exposes, ordered low→high as
-   *  OpenCode reports them (e.g. ["minimal","low","medium","high"]). Empty when
+   *  dsh reports them (e.g. ["minimal","low","medium","high"]). Empty when
    *  the model has no selectable reasoning levels. Pass one as `sendPrompt`'s
-   *  `variant` to pick a per-turn effort; OpenCode maps it to the provider's
+   *  `variant` to pick a per-turn effort; dsh maps it to the provider's
    *  native param (OpenAI reasoningEffort, Anthropic thinking, …). `listProviders`
    *  always sets it (possibly []); optional so terse fixtures can omit it. */
   variants?: string[];
 }
 
-/** A provider OpenCode can use right now (auth present or public). */
+/** A provider dsh can use right now (auth present or public). */
 export interface ProviderInfo {
   id: string;
   name: string;
@@ -363,7 +339,7 @@ export interface ProviderAuthMethod {
   prompts?: AuthPrompt[];
 }
 
-/** Catalog entry: a provider OpenCode knows how to talk to (not necessarily connected). */
+/** Catalog entry: a provider dsh knows how to talk to (not necessarily connected). */
 export interface ProviderCatalogEntry {
   id: string;
   name: string;
@@ -391,23 +367,23 @@ export interface McpServer {
   config?: McpConfig;
 }
 
-// ---- Raw OpenCode wire shapes (subset we consume) ----
+// ---- Raw dsh wire shapes (subset we consume) ----
 
-export interface OpenCodeRawEvent {
+export interface RuntimeRawEvent {
   type: string;
   properties?: Record<string, unknown>;
 }
 
-export interface OpenCodeTextPart {
+export interface RuntimeTextPart {
   id: string;
   type: "text";
   text: string;
 }
-export interface OpenCodeToolPart {
+export interface RuntimeToolPart {
   id: string;
   type: "tool";
   callID: string;
   tool: string;
   state: { status: "pending" | "running" | "completed" | "error"; title?: string };
 }
-export type OpenCodePart = OpenCodeTextPart | OpenCodeToolPart | { type: string };
+export type RuntimePart = RuntimeTextPart | RuntimeToolPart | { type: string };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenCodeEvent, HistoryMessage } from "@deeplab/sdk";
+import type { RuntimeEvent, HistoryMessage } from "@deeplab/sdk";
 import { AUTO_REVIEW_PROMPT } from "./autoReview";
 import {
   datedWorkspaceName,
@@ -18,17 +18,17 @@ import {
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
-const foldAll = (events: OpenCodeEvent[], from: FoldState = empty): FoldState =>
+const foldAll = (events: RuntimeEvent[], from: FoldState = empty): FoldState =>
   events.reduce((s, e) => foldEvent(s, e), from);
 
 describe("tidyToolTitle", () => {
   it("shows workspace files by their relative path", () => {
-    expect(tidyToolTitle("/Users/asq/Documents/OpenLab/demo/analyze.py")).toBe("demo/analyze.py");
-    expect(tidyToolTitle("mkdir -p /Users/asq/Documents/OpenLab/demo_analysis")).toBe(
+    expect(tidyToolTitle("/Users/asq/Documents/DeepLab/demo/analyze.py")).toBe("demo/analyze.py");
+    expect(tidyToolTitle("mkdir -p /Users/asq/Documents/DeepLab/demo_analysis")).toBe(
       "mkdir -p demo_analysis",
     );
-    // OpenCode's write-tool titles drop the leading slash — must still relativize.
-    expect(tidyToolTitle("Users/asq/Documents/OpenLab/demo_analysis/analyze.py")).toBe(
+    // dsh's write-tool titles drop the leading slash — must still relativize.
+    expect(tidyToolTitle("Users/asq/Documents/DeepLab/demo_analysis/analyze.py")).toBe(
       "demo_analysis/analyze.py",
     );
   });
@@ -72,7 +72,7 @@ describe("toolPresentation", () => {
   });
   it("file tools: verb + relative path", () => {
     expect(
-      toolPresentation("write", "", { filePath: "/Users/asq/Documents/OpenLab/demo/train.py" }),
+      toolPresentation("write", "", { filePath: "/Users/asq/Documents/DeepLab/demo/train.py" }),
     ).toEqual({ verb: "Created", title: "demo/train.py" });
     expect(toolPresentation("edit", "", { filePath: "config.yaml" })).toEqual({
       verb: "Edited",
@@ -131,7 +131,7 @@ describe("foldEvent", () => {
   });
 
   it("places an inline presentation immediately after its completed tool call", () => {
-    const event: OpenCodeEvent = {
+    const event: RuntimeEvent = {
       type: "tool.updated",
       sessionId: S,
       callId: "present-1",
@@ -183,10 +183,10 @@ describe("foldEvent", () => {
   });
 
   it("shows the file path for a file tool that has no title yet", () => {
-    // OpenCode only sets a write/edit tool's title on completion — while the
+    // dsh only sets a write/edit tool's title on completion — while the
     // tool runs, the file path in its input is the only thing worth showing.
     const s = foldAll([
-      { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "/Users/asq/Documents/OpenLab/2026-07-04/index.html", content: "<!doctype html>" } },
+      { type: "tool.updated", sessionId: S, callId: "c1", tool: "write", status: "running", input: { filePath: "/Users/asq/Documents/DeepLab/2026-07-04/index.html", content: "<!doctype html>" } },
     ]);
     expect(s.blocks[0]).toMatchObject({
       kind: "tool-call",
@@ -371,7 +371,7 @@ describe("historyToThread", () => {
   });
 
   it("renders a user-run '!' shell turn like the live path: '! cmd' + inline output", () => {
-    // OpenCode records a "!" run as a synthetic user text + a bash tool part.
+    // dsh records a "!" run as a synthetic user text + a bash tool part.
     const msgs: HistoryMessage[] = [
       {
         role: "user",
@@ -490,7 +490,7 @@ describe("historyToThread", () => {
   });
 
   it("shows a slash command as what the user typed, not its expanded template", () => {
-    // OpenCode stores the EXPANDED command/skill template as the user message,
+    // dsh stores the EXPANDED command/skill template as the user message,
     // with typed arguments appended — reverse-map via the known templates.
     const template = "\nThis skill guides growth for indie AI products…\n\n## Core Philosophy\n…";
     const msgs: HistoryMessage[] = [
@@ -510,7 +510,7 @@ describe("historyToThread", () => {
     // long instruction block after them — prefix/suffix matching around
     // $ARGUMENTS must recover the typed "/goal <args>".
     const template =
-      'OpenCode goal mode command "/goal" was invoked.\n\nArguments:\n<goal_command_arguments>\n$ARGUMENTS\n</goal_command_arguments>\n\nUse the goal tools to handle this command:\n- If the arguments are empty, call get_goal…';
+      'dsh goal mode command "/goal" was invoked.\n\nArguments:\n<goal_command_arguments>\n$ARGUMENTS\n</goal_command_arguments>\n\nUse the goal tools to handle this command:\n- If the arguments are empty, call get_goal…';
     const expanded = template.replace("$ARGUMENTS", "梳理项目，做一个详细剧情docx。");
     const msgs: HistoryMessage[] = [
       { role: "user", parts: [{ type: "text", text: expanded }] },

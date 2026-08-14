@@ -1,9 +1,9 @@
-// Pure merge of provider credentials/model into OpenCode config JSON.
+// Pure merge of provider credentials/model into dsh config JSON.
 // Used by the runtime command, which writes it into an app-private config dir.
 use serde_json::{json, Value};
 
 /// Approval modes for agent tool use (the composer's Codex-style switch).
-/// OpenCode evaluates permission rules last-match-wins with user config rules
+/// dsh evaluates permission rules last-match-wins with user config rules
 /// appended after its builtin `"*": "allow"` — so "approve" only needs `ask`
 /// rules and everything unmatched still runs without a prompt.
 pub const MODE_APPROVE: &str = "approve";
@@ -17,7 +17,7 @@ const BROWSER_IDLE_TIMEOUT_MS: &str = "600000";
 /// Command tokens the "approve" mode gates behind a prompt, per the AGENTS.md
 /// safety defaults: deletion, privilege/system changes, dependency installs,
 /// and remote/outward connections. Each token yields two glob rules:
-/// `"T *"` (command starts with it; also matches bare `T` — OpenCode turns a
+/// `"T *"` (command starts with it; also matches bare `T` — dsh turns a
 /// trailing " *" into an optional group) and `"* T *"` (embedded in a compound
 /// command like `cd x && rm -rf y`; the leading space avoids matching words
 /// that merely end in the token).
@@ -46,7 +46,7 @@ fn approve_permission() -> Value {
     json!({ "bash": Value::Object(bash), "webfetch": "ask" })
 }
 
-/// Set the approval mode in OpenCode config JSON. "approve" installs the ask
+/// Set the approval mode in dsh config JSON. "approve" installs the ask
 /// rules; "full" writes `"permission": {}` — zero rules (builtin defaults),
 /// with the key's presence marking that the user made a choice (so startup
 /// seeding never overrides it). Other keys are preserved.
@@ -114,7 +114,7 @@ pub fn migrate_browser_integration(existing: &str) -> Option<String> {
         }
     }
 
-    // OpenCode also discovers ~/.claude/skills. A popular, unrelated
+    // dsh also discovers ~/.claude/skills. A popular, unrelated
     // Chrome-extension skill uses the legacy id, so hide that skill only while
     // this connector is configured. The official bundled skill remains visible
     // as `open-science-browser`.
@@ -266,7 +266,7 @@ pub fn permission_mode_of(existing: &str) -> Option<&'static str> {
     }
 }
 
-/// Merge provider credentials/model into existing OpenCode config JSON.
+/// Merge provider credentials/model into existing dsh config JSON.
 /// Empty fields are left untouched; existing unrelated keys are preserved.
 pub fn merge_config(
     existing: &str,
@@ -358,7 +358,7 @@ pub fn ensure_browser_guard_plugin(existing: &str, plugin_path: &str) -> Option<
     ensure_named_plugin(existing, plugin_path, "browser-guard.ts")
 }
 
-/// Project memory: OpenCode resolves a relative `instructions` entry against
+/// Project memory: dsh resolves a relative `instructions` entry against
 /// the session's working directory, so this one entry gives every project its
 /// own memory file without any per-project config.
 pub const PROJECT_MEMORY_FILE: &str = "AGENTS.md";
@@ -375,7 +375,7 @@ fn as_object(existing: &str) -> Value {
     root
 }
 
-/// Turn OpenCode's automatic context compaction on the first time we see a
+/// Turn dsh's automatic context compaction on the first time we see a
 /// config without a `compaction` block. Without it a long conversation ends in
 /// "Input exceeds context window" (#62); with it the runtime summarizes the
 /// older turns and carries on in the same session. Set explicitly rather than
@@ -756,7 +756,7 @@ mod tests {
         let v: Value = serde_json::from_str(&out).unwrap();
         let bash = v["permission"]["bash"].as_object().unwrap();
         // Prefix form gates a command that starts with the token (also bare,
-        // via OpenCode's trailing-" *" optionalization)…
+        // via dsh's trailing-" *" optionalization)…
         assert_eq!(bash["rm *"], "ask");
         assert_eq!(bash["pip install *"], "ask");
         assert_eq!(bash["git push *"], "ask");
@@ -775,7 +775,7 @@ mod tests {
         let approved = set_permission_mode("", MODE_APPROVE).unwrap();
         let out = set_permission_mode(&approved, MODE_FULL).unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
-        // {} = zero rules = OpenCode builtin defaults; the key's presence
+        // {} = zero rules = dsh builtin defaults; the key's presence
         // marks "user chose this" so startup never re-seeds approve mode.
         assert_eq!(v["permission"], json!({}));
     }

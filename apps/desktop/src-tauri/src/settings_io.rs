@@ -1,5 +1,5 @@
 //! One-click export/import of the user's portable settings: custom model
-//! providers (the OpenCode global config's `provider` map) and custom remote
+//! providers (the dsh global config's `provider` map) and custom remote
 //! compute servers (`<base workspace>/.openlab/compute.json`). The app
 //! menu's File → Export Settings / Import Settings items drive these.
 //!
@@ -26,7 +26,7 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
-/// The `provider` map currently in the OpenCode global config ({} when absent).
+/// The `provider` map currently in the dsh global config ({} when absent).
 fn read_providers(app: &AppHandle) -> Result<serde_json::Value, String> {
     let path = runtime::effective_config_file(app)?;
     let text = std::fs::read_to_string(&path).unwrap_or_default();
@@ -34,7 +34,7 @@ fn read_providers(app: &AppHandle) -> Result<serde_json::Value, String> {
         return Ok(serde_json::json!({}));
     }
     let v: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("OpenCode config parse: {e}"))?;
+        serde_json::from_str(&text).map_err(|e| format!("dsh config parse: {e}"))?;
     Ok(v.get("provider").cloned().unwrap_or_else(|| serde_json::json!({})))
 }
 
@@ -68,7 +68,7 @@ pub async fn export_settings(app: AppHandle) -> Result<Option<String>, String> {
     Ok(Some(path.to_string_lossy().to_string()))
 }
 
-/// Merge `incoming` providers (from an import file) into the OpenCode global
+/// Merge `incoming` providers (from an import file) into the dsh global
 /// config, replacing same-id entries and keeping everything else.
 fn merge_providers_into_config(app: &AppHandle, incoming: &serde_json::Value) -> Result<(), String> {
     let path = runtime::effective_config_file(app)?;
@@ -76,9 +76,9 @@ fn merge_providers_into_config(app: &AppHandle, incoming: &serde_json::Value) ->
     let mut root: serde_json::Value = if text.trim().is_empty() {
         serde_json::json!({})
     } else {
-        serde_json::from_str(&text).map_err(|e| format!("OpenCode config parse: {e}"))?
+        serde_json::from_str(&text).map_err(|e| format!("dsh config parse: {e}"))?
     };
-    let obj = root.as_object_mut().ok_or("OpenCode config is not an object")?;
+    let obj = root.as_object_mut().ok_or("dsh config is not an object")?;
     let providers = obj.entry("provider").or_insert_with(|| serde_json::json!({}));
     let prov = providers.as_object_mut().ok_or("config.provider is not an object")?;
     if let Some(map) = incoming.as_object() {
@@ -155,7 +155,7 @@ pub async fn import_settings(app: AppHandle) -> Result<String, String> {
     Ok(format!("{n_providers} providers, {n_machines} machines"))
 }
 
-/// Restart the bundled OpenCode only if it is currently running.
+/// Restart the bundled dsh only if it is currently running.
 fn restart_if_running(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<runtime::RuntimeState>();
     let _ = runtime::restart_sidecar_if_running(app, state.inner())?;

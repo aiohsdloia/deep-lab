@@ -55,7 +55,7 @@
   "skills": {
     "title": "技能与代理",
     "description": {
-      "prefix": "从 OpenCode 运行时实时加载——内置技能包、工作区中位于 ",
+      "prefix": "从 DeepSeek Harness 运行时实时加载——内置技能包、工作区中位于 ",
       "suffix": " 下的所有内容，以及您自己放在 ~/.claude/skills 或 ~/.agents/skills 的技能。"
     },
     "install": {
@@ -66,7 +66,7 @@
       "hintConnected": "粘贴 SKILL.md 会直接安装；其他内容会打开代理会话。安装后的技能在所有工作区都可用。",
       "hintDisconnected": "请先连接运行时。",
       "installed": "已安装“{{name}}”——在所有工作区均可用。",
-      "agentPrompt": "用户在技能安装框中输入了以下内容：\n\n---\n{{input}}\n---\n\n请耐心协助用户完成安装：先确认用户指的是哪个技能（可以抓取该 URL、搜索，或在含义不明时直接询问用户），然后把它保存为技能文件 .opencode/skills/<name>/SKILL.md，必须写在当前工作区内、不要写到工作区之外（之后由应用负责让它在所有工作区可用）。技能文件的格式见 customize-opencode 技能。最后回复已安装技能的名称。",
+      "agentPrompt": "用户在技能安装框中输入了以下内容：\n\n---\n{{input}}\n---\n\n请耐心协助用户完成安装：先确认用户指的是哪个技能（可以抓取该 URL、搜索，或在含义不明时直接询问用户），然后把它保存为技能文件 .dsh/skills/<name>/SKILL.md，必须写在当前工作区内、不要写到工作区之外（之后由应用负责让它在所有工作区可用）。技能文件的格式见 customize-dsh 技能。最后回复已安装技能的名称。",
       "echo": "请协助我安装这个技能：\n\n{{input}}",
       "adoptFailed": "技能已写入，但未能移动到你的配置目录；当这个会话文件夹被替换时它会消失：{{detail}}"
     },
@@ -76,7 +76,7 @@
       "found": "已找到",
       "notFound": "未找到",
       "appManaged": "应用内置",
-      "note": "OpenCode 使用此处已安装的组件运行代码（例如通过其 shell 工具调用 Python）。uv 随应用内置，Jupyter 可在「设置 → 连接器」中由应用托管。Python 和 R 并未内置——请自行安装它们或安装 Science Pack 以启用分析功能。"
+      "note": "dsh 使用此处已安装的组件运行代码（例如通过其 shell 工具调用 Python）。uv 随应用内置，Jupyter 可在「设置 → 连接器」中由应用托管。Python 和 R 并未内置——请自行安装它们或安装 Science Pack 以启用分析功能。"
     },
     "agentsSection": {
       "sectionTitle": "代理（{{count}}）",

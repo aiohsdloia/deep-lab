@@ -40,11 +40,11 @@
   },
   "page": {
     "title": "Settings",
-    "subtitle": "Everything here configures the bundled OpenCode runtime — one config, no copies."
+    "subtitle": "Everything here configures the bundled DeepSeek Harness runtime — one config, no copies."
   },
   "runtime": {
     "title": "Agent runtime",
-    "hint": "opencode serve, driven over its HTTP + SSE API",
+    "hint": "The bundled dsh sidecar, driven over its HTTP + WebSocket API",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "serverLabel": "Server",
@@ -63,26 +63,6 @@
     "mirrorPypiPlaceholder": "https://pypi.tuna.tsinghua.edu.cn/simple",
     "mirrorPythonPlaceholder": "https://mirror.example.com/python-build-standalone",
     "mirrorHint": "Optional mirrors, used only when setting up Python tools (Jupyter, science databases) on networks where pypi.org / github.com are slow. Leave blank for defaults."
-  },
-  "acp": {
-    "title": "Agent",
-    "hint": "Which agent this app drives: the bundled OpenCode runtime, or any agent that speaks the Agent Client Protocol (ACP) over stdio.",
-    "bundled": "OpenCode (bundled)",
-    "bundledHint": "The default runtime — providers, skills, plan mode and saved conversations.",
-    "add": "Add an agent",
-    "edit": "Edit",
-    "remove": "Remove",
-    "nameLabel": "Name",
-    "namePlaceholder": "Name (Codex, Gemini CLI, …)",
-    "commandLabel": "Command",
-    "commandPlaceholder": "Command (npx, gemini, …)",
-    "argsLabel": "Arguments",
-    "argsPlaceholder": "Arguments (-y @agentclientprotocol/codex-acp)",
-    "limits": "An ACP agent runs as a command on this computer, in the current workspace folder. It owns its own model, skills and history, so the model picker, plan mode and saved conversations stay with OpenCode — sessions started on an ACP agent are listed only while the app is running.",
-    "running": "Connected to the ACP agent.",
-    "starting": "Starting the ACP agent…",
-    "copyError": "Copy error",
-    "copiedError": "Error copied"
   },
   "updates": {
     "title": "App updates",
@@ -138,7 +118,7 @@
   },
   "providers": {
     "title": "Providers",
-    "hint": "Authentication, custom endpoints, and imported OpenCode logins",
+    "hint": "Authentication, custom endpoints, and imported DeepSeek logins",
     "connectPrompt": "Connect the runtime to manage providers.",
     "manage": "Manage",
     "collapse": "Collapse",
@@ -168,8 +148,7 @@
     "fetchModels": "Fetch models",
     "fetchingModels": "Fetching…",
     "noModelsFound": "No models reported by the endpoint.",
-    "addEndpoint": "Add endpoint",
-    "importLogin": "Already use the OpenCode CLI? Import its login"
+    "addEndpoint": "Add endpoint"
   },
   "mcp": {
     "title": "MCP servers",
@@ -271,8 +250,6 @@
     "couldNotRemoveMcp": "Could not remove the MCP server",
     "mcpRemoved": "MCP server {{name}} removed",
     "importFailed": "Import failed",
-    "noOpenCodeLoginFound": "No OpenCode CLI login found on this machine.",
-    "importedLogin": "Imported your OpenCode CLI login.",
     "couldNotSetProxy": "Could not apply the proxy setting",
     "proxyApplied": "Proxy setting applied",
     "mirrorSaved": "Mirror settings saved",
@@ -350,8 +327,8 @@
     },
     "workdir": {
       "label": "Default working directory",
-      "hint": "Job folders land in <workdir>/jobs/<name>. Leave empty to use openlab/jobs under your SSH home.",
-      "placeholder": "e.g. ~/openlab",
+      "hint": "Job folders land in <workdir>/jobs/<name>. Leave empty to use deeplab/jobs under your SSH home.",
+      "placeholder": "e.g. ~/deeplab",
       "save": "Save",
       "saveFailed": "Could not save working directory",
       "saved": "Working directory saved"
@@ -401,10 +378,7 @@
     "copied": "Copied to clipboard",
     "error": "Remote access change failed",
     "connect": "Connect",
-    "connectPrompt": "Enter the access token from the desktop app → Settings → Remote Access.",
-    "acpTitle": "External editors (ACP)",
-    "acpHint": "Drive this workspace from Zed, JetBrains, Neovim or any editor that speaks the Agent Client Protocol. Paste this agent entry into the editor's settings; it connects over the gateway above, with the access the token allows.",
-    "acpNodeHint": "The editor launches this script with Node 18+. The token is passed in the environment, not on the command line."
+    "connectPrompt": "Enter the access token from the desktop app → Settings → Remote Access."
   },
   "memory": {
     "title": "Memory",

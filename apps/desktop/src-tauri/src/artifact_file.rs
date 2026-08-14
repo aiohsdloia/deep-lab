@@ -303,7 +303,7 @@ pub(crate) fn strip_windows_verbatim(s: &str) -> String {
 
 /// A path in the OS-native form every other layer speaks. On Windows
 /// `canonicalize()` yields the `\\?\` verbatim form, which Explorer rejects, no
-/// other component ever produces, and no comparison against a path OpenCode
+/// other component ever produces, and no comparison against a path dsh
 /// reported can match — so it is unwrapped to the plain `C:\…`. Separators are
 /// left alone (the frontend compares by a normalized key). No-op off Windows,
 /// where `\` is a legal filename character and must never be rewritten.

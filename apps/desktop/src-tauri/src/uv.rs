@@ -51,7 +51,7 @@ pub async fn run_uv(
         .sidecar("uv")
         .map_err(|e| format!("uv sidecar not found: {e}"))?
         .args(args);
-    // Same proxy the OpenCode sidecar uses, plus optional PyPI / Python-download
+    // Same proxy the dsh sidecar uses, plus optional PyPI / Python-download
     // mirrors: a GUI-launched app inherits no shell env, so without this uv's
     // download of the managed Python (github.com) and wheels (pypi.org) ignores
     // the user's configured proxy and mirrors and can hang or fail on restricted

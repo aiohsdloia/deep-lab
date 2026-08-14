@@ -2,7 +2,7 @@ import type {
   AgentInfo,
   CommandInfo,
   HistoryMessage,
-  OpenCodeEvent,
+  RuntimeEvent,
   PermissionAskedEvent,
   PermissionReply,
   PromptFile,
@@ -17,19 +17,19 @@ import type {
 /**
  * The runtime-agnostic boundary between the app UI and the agent runtime.
  *
- * `AGENTS.md` mandates that the UI never calls OpenCode directly — it goes
- * through `packages/sdk`. This interface makes that seam explicit: it covers
- * ONLY the surface a generic agent runtime must expose (lifecycle, sessions,
- * capability discovery, model selection, and interactive requests).
+ * The UI never calls the runtime directly — it goes through `packages/sdk`.
+ * This interface makes that seam explicit: it covers ONLY the surface a
+ * generic agent runtime must expose (lifecycle, sessions, capability
+ * discovery, model selection, and interactive requests).
  *
- * Provider / MCP / OAuth configuration is deliberately OUT of scope — those are
- * configuration of a specific runtime (OpenCode today), not of "an agent
- * runtime" in general. Callers that need them go through the concrete
- * `OpenCodeClient` (e.g. `getClient()`), which `implements AgentRuntime`.
+ * Provider / MCP / OAuth configuration is deliberately OUT of scope — those
+ * are configuration of a specific runtime (the DeepSeek Harness sidecar), not
+ * of "an agent runtime" in general. Callers that need them go through the
+ * concrete `DshRuntime` (e.g. `getClient()`), which `implements
+ * AgentRuntime`.
  *
  * See `docs/rfc/agent-runtime.md` for the rationale. The sole implementation
- * today is `OpenCodeClient`; no second runtime is planned. This is Phase 1 —
- * formalize the seam, change no behavior.
+ * is `DshRuntime`.
  */
 export interface AgentRuntime {
   // ---- lifecycle ----
@@ -37,7 +37,7 @@ export interface AgentRuntime {
   close(): void;
   getStatus(): RuntimeStatus;
   onStatus(listener: (status: RuntimeStatus) => void): () => void;
-  onEvent(listener: (event: OpenCodeEvent) => void): () => void;
+  onEvent(listener: (event: RuntimeEvent) => void): () => void;
 
   // ---- sessions (a conversation) ----
   /** Create a session, optionally giving the runtime a concise initial title. */

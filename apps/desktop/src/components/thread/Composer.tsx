@@ -109,7 +109,7 @@ const APPROVAL_OPTIONS: { mode: ApprovalMode; icon: typeof Hand }[] = [
   { mode: "full", icon: Zap },
 ];
 
-/** Build (default) or Plan — OpenCode's read-only planning agent. Copy is
+/** Build (default) or Plan — dsh's read-only planning agent. Copy is
  *  translated at render time (`agentCopy`), mirroring the approval switch. */
 const AGENT_OPTIONS: { mode: AgentMode; icon: typeof Hammer }[] = [
   { mode: "build", icon: Hammer },
@@ -118,7 +118,7 @@ const AGENT_OPTIONS: { mode: AgentMode; icon: typeof Hammer }[] = [
 
 /**
  * The "Ask anything" composer. Static mock sessions pass no `onSend`; the live
- * OpenCode session passes one to submit prompts to the runtime. Attached
+ * dsh session passes one to submit prompts to the runtime. Attached
  * workspace files show as removable chips above the input, not as prompt text.
  *
  * Two prefix modes (only when their handler is provided):

@@ -7,7 +7,7 @@ import {
   type AgentRuntime,
   type CommandInfo,
   type HistoryMessage,
-  type OpenCodeEvent,
+  type RuntimeEvent,
   type PermissionAskedEvent,
   type PermissionReply,
   type ProviderInfo,
@@ -326,7 +326,7 @@ interface RuntimeState {
   threads: Record<string, Thread>;
   skills: SkillInfo[];
   agents: AgentInfo[];
-  /** Per-agent model / reasoning effort from OpenCode's config (Settings →
+  /** Per-agent model / reasoning effort from dsh's config (Settings →
    *  Models → per agent). Consulted when a pane has no explicit pick, so a
    *  configured agent model is what actually runs the turn (#96). */
   agentModels: Record<string, string>;
@@ -369,7 +369,7 @@ interface RuntimeState {
    *  switch, a server-URL change, or an explicit disconnect. */
   modelSwitchError: string | null;
   /** The composer's approval switch: "approve" (dangerous commands prompt)
-   *  or "full" (everything in-workspace runs). Loaded from OpenCode config. */
+   *  or "full" (everything in-workspace runs). Loaded from dsh config. */
   approvalMode: ApprovalMode;
   /** Persist a new approval mode (restarts the sidecar) and reconnect. */
   setApprovalMode: (mode: ApprovalMode) => Promise<void>;
@@ -389,7 +389,7 @@ interface RuntimeState {
    *  In-memory only: an app restart returns every session to a closed pane. */
   panes: Record<string, PaneState>;
   /** Composer agent switch per session (DRAFT_KEY for a draft); absent = build.
-   *  In-memory, but reconciled from the message stream and history: OpenCode's
+   *  In-memory, but reconciled from the message stream and history: dsh's
    *  plan_exit "Yes" continues the session as build — the pill must follow. */
   sessionAgents: Record<string, AgentMode>;
   /** Per-session model override (key = sid or DRAFT_KEY); absent = the global
@@ -500,7 +500,7 @@ interface RuntimeState {
    *  asked for. Agent bash steps stay quiet single-line log entries. */
   shellTurns: Record<string, true>;
   /** Sessions whose model call failed and is being retried server-side —
-   *  OpenCode backs off with no attempt cap, so this is what keeps a broken
+   *  dsh backs off with no attempt cap, so this is what keeps a broken
    *  provider from looking like a silent "Working…" forever. Cleared by the
    *  session's next sign of life (stream events, idle, error). */
   retryNotices: Record<string, { attempt: number; message: string }>;
@@ -622,7 +622,7 @@ interface RuntimeState {
 // kept separately so getClient() can hand Settings/setup the full dsh
 // provider/MCP surface that lives outside the AgentRuntime contract.
 let client: AgentRuntime | null = null;
-let opencodeClient: DshRuntime | null = null;
+let dshClient: DshRuntime | null = null;
 let openSessionSeq = 0;
 /** The model the user last DELIBERATELY switched to, and when. A switch does a
  *  masked reconnect, and connect() fires loadCatalog() un-awaited — so the
@@ -639,7 +639,7 @@ const SWITCH_HEAL_GRACE_MS = 15_000;
  *  promise so duplicate AppShell effects cannot start dueling connect loops. */
 let bootstrapInFlight: Promise<void> | null = null;
 /** Registered once: the remote-access gateway tells us when a LAN/CLI client
- *  created or deleted a session so the sidebar re-lists (no OpenCode event for
+ *  created or deleted a session so the sidebar re-lists (no dsh event for
  *  session create/delete). See docs/rfc/remote-access-gateway.md. */
 let gatewayListenerBound = false;
 /** Custom-model context-limit cleanup (#52) runs once per app run — every
@@ -664,7 +664,7 @@ function looksLikeSkillFile(text: string): boolean {
   return end > 0 && /^\s*name:\s*\S/m.test(body.slice(3, end));
 }
 
-/** The SDK recovers a dropped stream in ~250ms (OpenCode closes /event ~1s
+/** The SDK recovers a dropped stream in ~250ms (dsh closes /event ~1s
  *  after a config PATCH while rebuilding its instance). Surfacing that blip
  *  repaints every status consumer, so a ready→connecting flip is held this
  *  long and only shown if the stream does not come back. */
@@ -683,7 +683,7 @@ function teardownClient() {
     client.close();
   }
   client = null;
-  opencodeClient = null;
+  dshClient = null;
 }
 
 // ---- Cross-folder streaming (split panes) ----
@@ -698,7 +698,7 @@ let streamBaseUrl = "";
 let streamAuth = "";
 /** The store's event handler, captured once (set/get are stable) so foreground
  *  and every background stream share one folding path. */
-let sharedEventHandler: ((event: OpenCodeEvent) => void) | null = null;
+let sharedEventHandler: ((event: RuntimeEvent) => void) | null = null;
 function removeStreamClient(dir: string) {
   const c = streamClients.get(dir);
   if (c) {
@@ -758,7 +758,7 @@ export const DRAFT_KEY = "draft";
  *  create their own session on first send — instead of sharing DRAFT_KEY. */
 export const draftKeyFor = (leafId: string): string => `draft:${leafId}`;
 
-/** The composer's agent switch: "build" edits and runs; "plan" is OpenCode's
+/** The composer's agent switch: "build" edits and runs; "plan" is dsh's
  *  read-only planning agent (edits denied except its plan .md file). */
 export type AgentMode = "build" | "plan";
 /** One bounded retry for the first POSTs after a sidecar restart — the old
@@ -787,7 +787,7 @@ function remember(set: Set<string>, key: string, cap = DEDUP_CAP) {
 
 /** The app's own record of "session → workspace" association, keyed by session
  *  id. It is the source of truth for the sidebar's project grouping and is
- *  PERSISTED because the sidecar cannot always honour the move: opencode's
+ *  PERSISTED because the sidecar cannot always honour the move: dsh's
  *  move-session refuses to move a session into a directory owned by ANOTHER
  *  project (`current.projectID !== destination.id` — e.g. a loose "global"
  *  session added to an existing project), so the app still applies the
@@ -969,7 +969,7 @@ export function lastTurnInterrupted(messages: HistoryMessage[]): boolean {
  *
  *  Every member is ASSISTANT progress. `message.agent` is deliberately absent
  *  even though it arrives mid-turn: the SDK emits it only for USER messages, so
- *  it cannot witness the assistant working — and OpenCode re-emits the turn's
+ *  it cannot witness the assistant working — and dsh re-emits the turn's
  *  user message once the turn ENDS, about 40 ms after `session.idle`. Treating
  *  that as activity re-locked the session the instant it finished, leaving a
  *  spinner under a completed answer until `reconcileRunning` polled the server
@@ -977,7 +977,7 @@ export function lastTurnInterrupted(messages: HistoryMessage[]): boolean {
  *  user's log). A turn started by ANOTHER client is still caught: by the events
  *  below once the assistant does anything, and by `turnStillStreaming` from
  *  server truth whenever the session is opened. */
-const ACTIVITY_EVENTS: ReadonlySet<OpenCodeEvent["type"]> = new Set([
+const ACTIVITY_EVENTS: ReadonlySet<RuntimeEvent["type"]> = new Set([
   "text.updated",
   "reasoning.updated",
   "step.updated",
@@ -1061,7 +1061,7 @@ const LIVE_FOLD_MS = 250;
 const liveFoldLast = new Map<string, number>();
 const liveFoldPending = new Map<
   string,
-  { sessionId: string; timer: number; event: Extract<OpenCodeEvent, { type: "tool.updated" }> }
+  { sessionId: string; timer: number; event: Extract<RuntimeEvent, { type: "tool.updated" }> }
 >();
 
 /** Streamed text/reasoning tokens fold at most once per TEXT_FOLD_MS (latest
@@ -1074,7 +1074,7 @@ const textFoldPending = new Map<
   string,
   {
     timer: number;
-    event: Extract<OpenCodeEvent, { type: "text.updated" | "reasoning.updated" }>;
+    event: Extract<RuntimeEvent, { type: "text.updated" | "reasoning.updated" }>;
   }
 >();
 
@@ -1130,7 +1130,7 @@ export function rootSessionOf(parents: Record<string, string>, sessionId: string
 }
 
 /** Does an interactive ask belong to the subtree an interrupt just stopped?
- *  Aborting a session takes its subagent sessions down with it — OpenCode's
+ *  Aborting a session takes its subagent sessions down with it — dsh's
  *  cancel walks the subtree — so their asks die with the parent's. */
 function stoppedAsk(parents: Record<string, string>, stopped: string, askSession: string): boolean {
   return askSession === stopped || rootSessionOf(parents, askSession) === stopped;
@@ -1177,7 +1177,7 @@ async function performTurn(
   draftKey?: string,
 ): Promise<string | null> {
   if (!client) {
-    set({ error: "Not connected to the OpenCode runtime." });
+    set({ error: "Not connected to the DeepSeek Harness runtime." });
     return null;
   }
   // Where the draft's state is grafted from on lazy-create (this pane's own slot,
@@ -1723,9 +1723,9 @@ function onTurnIdle(set: StoreSet, get: StoreGet, sid: string, reviewable: boole
 
 /** Shared core of the two destructive "go back to a past message" actions
  *  (edit-and-resend, and plain revert): stop any running turn, revert the
- *  session to `messageID` — OpenCode drops it and every later message and rolls
+ *  session to `messageID` — dsh drops it and every later message and rolls
  *  back the files those turns changed — then mirror that truncation in the
- *  local thread. Returns whether the revert succeeded. OpenCode rejects a
+ *  local thread. Returns whether the revert succeeded. dsh rejects a
  *  revert on a busy session, so the abort's trailing session.idle is given a
  *  few short retries to land first. */
 async function revertToMessage(
@@ -1760,16 +1760,16 @@ async function revertToMessage(
   return true;
 }
 
-/** The live OpenCode client (Settings talks to the runtime's config API directly). */
+/** The live dsh client (Settings talks to the runtime's config API directly). */
 export function getClient(): DshRuntime | null {
-  return opencodeClient;
+  return dshClient;
 }
 
 /** The reasoning variant to send with a turn: the user's pick, but only when the
  *  current default model actually exposes it. Variant vocabularies differ per
  *  model (OpenAI has "minimal", Anthropic has "max", many models have none), so
  *  switching to a model without the chosen level cleanly sends nothing and lets
- *  OpenCode apply that model's default effort. */
+ *  dsh apply that model's default effort. */
 function variantExposed(
   providers: RuntimeState["providers"],
   model: string | null,
@@ -1783,7 +1783,7 @@ function variantExposed(
     ?.models.find((mm) => mm.id === model.slice(i + 1));
   return m?.variants?.includes(variant) ? variant : undefined;
 }
-/** OpenCode's primary agent when the composer is not in plan mode. */
+/** dsh's primary agent when the composer is not in plan mode. */
 export const PRIMARY_AGENT = "build";
 
 /**
@@ -2144,9 +2144,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         client.listAgents(),
         client.getDefaultModel().catch(() => null),
         client.listCommands().catch(() => []),
-        // listProviders is OpenCodeClient-only (not on the AgentRuntime port);
-        // opencodeClient is the same instance as `client`, set together.
-        opencodeClient ? opencodeClient.listProviders().catch(() => []) : Promise.resolve([]),
+        // listProviders is dshClient-only (not on the AgentRuntime port);
+        // dshClient is the same instance as `client`, set together.
+        dshClient ? dshClient.listProviders().catch(() => []) : Promise.resolve([]),
       ]);
       // A model switch in flight owns `defaultModel`: this read may predate
       // the switch's config write, and applying it would visibly revert the
@@ -2186,7 +2186,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         }
       }
       let skills = firstSkills;
-      // The first workspace-scoped /api/skill call triggers OpenCode's lazy
+      // The first workspace-scoped /api/skill call triggers dsh's lazy
       // instance init and can answer before the scan finishes — poll briefly.
       for (let i = 0; skills.length === 0 && i < 4; i++) {
         await sleep(400);
@@ -2231,7 +2231,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   setDefaultModel: async (model) => {
-    if (!client) throw new Error("Not connected to the OpenCode runtime.");
+    if (!client) throw new Error("Not connected to the DeepSeek Harness runtime.");
     // #37 diagnostics: record what we ask for so a repro (e.g. switching after a
     // plan's quota runs out) shows the exact target model.
     void logDebug(`[provider] setDefaultModel → ${model}`);
@@ -2239,7 +2239,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // won't revert it against a still-warming provider list (#37).
     lastSwitchModel = model;
     lastSwitchAt = Date.now();
-    // Applying the model PATCHes OpenCode's global config, which closes the
+    // Applying the model PATCHes dsh's global config, which closes the
     // event stream server-side. EventSource's own reconnect does not reliably
     // recover from that — it strands the app in "connecting"/disconnected until
     // a manual Connect. So do a deliberate masked reconnect (a fresh stream,
@@ -2260,7 +2260,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // not recognized" vs. a stale config-vs-auth mismatch. Best-effort, never
       // fails the switch.
       try {
-        const oc = opencodeClient;
+        const oc = dshClient;
         if (oc) {
           const [applied, provs] = await Promise.all([oc.getDefaultModel(), oc.listProviders()]);
           void logDebug(
@@ -2341,7 +2341,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       directory: directory ?? undefined,
       ...(password ? { authHeader: `Bearer ${password}`, wsQueryToken: password } : {}),
     });
-    opencodeClient = oc;
+    dshClient = oc;
     client = oc;
     const c: AgentRuntime = oc;
     // Background streams reuse the same sidecar; the foreground now streams
@@ -2587,7 +2587,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             });
           }
           // A user message names its agent. This is how the pill follows
-          // OpenCode's own plan_exit "Yes" (it injects a build user message)
+          // dsh's own plan_exit "Yes" (it injects a build user message)
           // — and it self-confirms our own sends. Any OTHER agent (the auto-review
           // turn's `reviewer`, or a custom primary) is left alone: the pill only
           // speaks for the two modes it can actually show, and must not claim
@@ -2924,7 +2924,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       // The agent finished a skill install: it wrote the skill into THIS
       // session's workspace, which the next dated session folder would leave
-      // behind — copy it into the profile's user skills dir, where OpenCode
+      // behind — copy it into the profile's user skills dir, where dsh
       // finds it from every workspace (#61).
       if (event.type === "session.idle" && pendingSkillInstall?.sessionId === sid) {
         const pending = pendingSkillInstall;
@@ -2974,11 +2974,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       void get().reconcileRunning();
       // Older versions wrote a blind 128k context limit for custom-endpoint
       // models with an unknown window; on models whose real window is larger
-      // that guess made OpenCode manufacture a context-overflow and abort (#52).
+      // that guess made dsh manufacture a context-overflow and abort (#52).
       // Reset those once per run. Desktop only: a gateway web client may hold a
       // read-only token, and the host app does this anyway.
-      // (OpenCode config; an ACP agent has no such config to clean.)
-      const oc = opencodeClient;
+      // (dsh config; an ACP agent has no such config to clean.)
+      const oc = dshClient;
       if (!isGatewayWeb && !contextLimitsCleaned && oc) {
         contextLimitsCleaned = true;
         // Best-effort: deferred into a promise chain so no failure — even a
@@ -3049,7 +3049,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       await get().connectRetry();
       // A remote client (LAN web / CLI) that creates or deletes a session emits
-      // no OpenCode session event, so the gateway pings us to re-list — its
+      // no dsh session event, so the gateway pings us to re-list — its
       // sessions then show up in the sidebar exactly like locally-made ones.
       if (!gatewayListenerBound) {
         gatewayListenerBound = true;
@@ -3131,7 +3131,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   resetDraftView: () => set((s) => blankDraft(s)),
 
   // Local /new and /clear: clear the visible chat context, but keep the active
-  // folder. The first next message creates a new OpenCode session in that same
+  // folder. The first next message creates a new dsh session in that same
   // folder; no session, database row, or file is deleted here. `key` is the
   // draft slot to reset — the pane's own `draft:<leafId>` for a tiled pane,
   // the global DRAFT_KEY for the single-pane fallback.
@@ -3874,7 +3874,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
 
   moveSessionToWorkspace: async (id, directory) => {
     const oc = getClient();
-    // Re-homing a session is OpenCode control-plane surface, not part of the
+    // Re-homing a session is dsh control-plane surface, not part of the
     // runtime-agnostic port — go through the concrete client.
     if (!oc) return false;
     let serverMoved = true;
@@ -3930,8 +3930,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   // Install a skill (#1). Installed skills land in the app profile's user
-  // skills dir, which OpenCode scans for every workspace — writing them into
-  // the session's own .opencode/skills/ loses them with that dated folder (#61).
+  // skills dir, which dsh scans for every workspace — writing them into
+  // the session's own .dsh/skills/ loses them with that dated folder (#61).
   installSkill: async (text) => {
     // A pasted SKILL.md needs no model: the app writes it itself. This also
     // works before any provider is configured.
@@ -4012,7 +4012,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // The foreground `client` already streams the active folder; web is
     // single-pane. Open one background stream per OTHER folder shown, and close
     // streams for folders no longer tiled.
-    if (isGatewayWeb || !opencodeClient) return;
+    if (isGatewayWeb || !dshClient) return;
     const foreground = get().workspace;
     const wanted = new Set(directories.filter((d): d is string => !!d && d !== foreground));
     for (const dir of [...streamClients.keys()]) {
@@ -4047,14 +4047,14 @@ export interface FoldState {
   index: Record<string, number>;
 }
 
-/** Pure reducer: fold one normalized OpenCode event into a thread's blocks. */
+/** Pure reducer: fold one normalized runtime event into a thread's blocks. */
 /**
  * Tidy a tool-call title for the conversation: show workspace files by their
  * relative path (`demo/analyze.py`), not the full `/Users/.../OpenLab/...`
  * absolute path, so the thread reads like a researcher's log, not a shell trace.
  * The workspace path never contains spaces (by design), so a space-free run
  * ending in `DeepLab/` matches it whether or not it has a leading slash
- * (OpenCode's write-tool titles drop it).
+ * (the runtime's write-tool titles drop it).
  */
 export function tidyToolTitle(title: string): string {
   return title.replace(/[^\s]*(?:DeepLab|OpenLab|OpenScience)\//g, "").trim() || title;
@@ -4138,7 +4138,7 @@ export function toolPresentation(
 
 export function foldEvent(
   state: FoldState,
-  event: OpenCodeEvent,
+  event: RuntimeEvent,
   opts?: { shellTurn?: boolean },
 ): FoldState {
   const blocks = [...state.blocks];
@@ -4323,10 +4323,10 @@ export function lastAgentMode(messages: HistoryMessage[]): AgentMode {
 
 export function historyToThread(messages: HistoryMessage[], commands?: CommandInfo[]): FoldState {
   const blocks: ThreadBlock[] = [];
-  // OpenCode stores a slash command's EXPANDED template as the user message —
+  // dsh stores a slash command's EXPANDED template as the user message —
   // show the "/name args" the user actually typed instead. Templates either
   // embed a $ARGUMENTS placeholder anywhere (match prefix + suffix around it,
-  // e.g. the goal plugin's <goal_command_arguments> block) or carry no
+  // e.g. the goal command's <goal_command_arguments> block) or carry no
   // placeholder (typed args are appended after the template, no marker).
   // Longest template first, so one template being a prefix of another's
   // expansion can't mis-attribute.

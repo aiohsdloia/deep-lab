@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DshRuntime } from "@deeplab/sdk";
-import type { OpenCodeEvent } from "@deeplab/sdk";
+import type { RuntimeEvent } from "@deeplab/sdk";
 
 /**
  * dsh streams one reasoning/text block as MANY `assistant/chunk` deltas, each
@@ -16,7 +16,7 @@ describe("DshRuntime chunk folding partIds", () => {
   function foldEvent(event: { seq: number; type: string; turn: number; step: number; index: number; text?: string }) {
     const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
     const seen: Array<{ type: string; partId: string; text: string }> = [];
-    rt.onEvent((e: OpenCodeEvent) => {
+    rt.onEvent((e: RuntimeEvent) => {
       if (e.type === "reasoning.updated" || e.type === "text.updated") {
         seen.push({ type: e.type, partId: e.partId, text: e.text });
       }
@@ -61,7 +61,7 @@ describe("DshRuntime chunk folding partIds", () => {
     // idempotently), so the last event carries the whole reasoning.
     const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
     const seen: Array<{ type: string; partId: string; text: string }> = [];
-    rt.onEvent((e: OpenCodeEvent) => {
+    rt.onEvent((e: RuntimeEvent) => {
       if (e.type === "reasoning.updated") seen.push({ type: e.type, partId: e.partId, text: e.text });
     });
     const fold = (text: string) =>
@@ -80,7 +80,7 @@ describe("DshRuntime chunk folding partIds", () => {
   it("surfaces nested tool output from dsh's tool/result event", () => {
     const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
     const seen: Array<{ callId: string; output?: string }> = [];
-    rt.onEvent((e: OpenCodeEvent) => {
+    rt.onEvent((e: RuntimeEvent) => {
       if (e.type === "tool.updated") seen.push({ callId: e.callId, output: e.output });
     });
     const fold = (e: unknown) =>

@@ -1,12 +1,12 @@
 // Browser control via the bundled agent-browser sidecar (Vercel Labs). We do
 // NOT drive Chrome ourselves — agent-browser exposes an MCP stdio server the
-// OpenCode agent talks to. This module only does the desktop-side glue the
-// frontend can't: resolve the sidecar's on-disk path (OpenCode, not Tauri,
+// dsh agent talks to. This module only does the desktop-side glue the
+// frontend can't: resolve the sidecar's on-disk path (dsh, not Tauri,
 // spawns it, so it needs an absolute command), enumerate the user's Chrome
 // profiles, detect an installed executable for a separate managed process, and
 // (fallback) download a browser when none is present. All MCP wiring itself is
 // registered from the
-// frontend via OpenCodeClient.addMcpServer, mirroring the science connectors.
+// frontend via dshClient.addMcpServer, mirroring the science connectors.
 use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -54,7 +54,7 @@ struct ProfilesEnvelope {
     success: bool,
 }
 
-/// Absolute path to the bundled agent-browser sidecar. OpenCode spawns the MCP
+/// Absolute path to the bundled agent-browser sidecar. dsh spawns the MCP
 /// server itself (it is not on PATH), so the frontend needs the real path to
 /// put in the MCP `command`. Tauri places externalBin next to the app
 /// executable with the target-triple suffix stripped.

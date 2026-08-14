@@ -70,7 +70,7 @@ describe("autoReviewPrompt", () => {
   });
 });
 
-// The reviewer is deployed into the OpenCode profile as a real agent. `mode`
+// The reviewer is deployed into the dsh profile as a real agent. `mode`
 // decides who may invoke it: `all` also puts it on the task tool's delegation
 // menu, so a model could spawn it by itself and reviews turned up inside
 // subagents even with auto-review switched off. The app pins it as the agent of
@@ -80,7 +80,7 @@ describe("the reviewer agent's profile", () => {
   it("is not offered to the task tool", () => {
     // vitest runs from apps/desktop; the profile lives at the repo root.
     const md = readFileSync(
-      resolve(process.cwd(), "../../runtime/opencode-profile/agent/reviewer.md"),
+      resolve(process.cwd(), "../../runtime/dsh-profile/agent/reviewer.md"),
       "utf8",
     );
     const frontmatter = md.split("---")[1] ?? "";

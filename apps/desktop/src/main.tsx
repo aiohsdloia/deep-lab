@@ -12,7 +12,7 @@ import "./index.css";
 
 // Web client: adopt a token from the opened link (so a copied URL just works),
 // then catch gateway 401s (rotated/revoked token) → re-auth. Both before any
-// OpenCodeClient binds fetch or the app reads the stored token.
+// dshClient binds fetch or the app reads the stored token.
 consumeUrlToken();
 installGatewayAuthGuard();
 

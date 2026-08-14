@@ -24,7 +24,7 @@
     "menuScratch": "Start from scratch",
     "menuExisting": "Use an existing folder",
     "importTitle": "Import existing folder",
-    "importSubtitle": "Choose how Open Lab should use “{{name}}”.",
+    "importSubtitle": "Choose how DeepLab should use “{{name}}”.",
     "importCopy": "Copy into workspace",
     "importCopyHint": "Creates a managed duplicate and leaves the original untouched, but uses extra disk space.",
     "importInPlace": "Use in place",

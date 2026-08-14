@@ -10,7 +10,7 @@ const WALK_MAX = 500;
 /** Folders that are never worth offering as context. */
 const SKIP_DIRS = new Set([
   ".git",
-  ".opencode",
+  ".dsh",
   "node_modules",
   "__pycache__",
   ".venv",

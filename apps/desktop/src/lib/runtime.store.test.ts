@@ -140,7 +140,7 @@ vi.mock("@deeplab/sdk", () => {
       if (mocks.failConnects > 0) {
         mocks.failConnects--;
         this.statusCb("error");
-        throw new Error("Could not open OpenCode event stream");
+        throw new Error("Could not open dsh event stream");
       }
       this.statusCb("ready");
     }
@@ -754,7 +754,7 @@ describe("per-session workspace folders", () => {
     expect(s.runningSessions["ses_new"]).toBeUndefined();
   });
 
-  it("/clear starts a new draft in the same folder without calling OpenCode command", async () => {
+  it("/clear starts a new draft in the same folder without calling a dsh command", async () => {
     useRuntimeStore.setState({
       currentId: "ses_old",
       draftWorkspaces: {},
@@ -1240,7 +1240,7 @@ describe("stale running locks and interrupt", () => {
   });
 
   it("the user message re-emitted after a turn ends does not restart the spinner", async () => {
-    // OpenCode re-emits the turn's USER message ~40 ms after session.idle. That
+    // dsh re-emits the turn's USER message ~40 ms after session.idle. That
     // surfaces as `message.agent`, which said nothing about the assistant — but
     // counting it as activity re-locked the session the instant it finished, so
     // a completed answer sat under a spinner until the ~15 s server poll cleared
@@ -1822,7 +1822,7 @@ describe("approval mode", () => {
       connectRetry: vi.fn(async () => {
         useRuntimeStore.setState({
           status: "error",
-          error: "Could not open OpenCode event stream",
+          error: "Could not open dsh event stream",
         });
         return false;
       }),
@@ -1831,7 +1831,7 @@ describe("approval mode", () => {
     try {
       await expect(
         useRuntimeStore.getState().setDefaultModel("anthropic/claude-sonnet-5"),
-      ).rejects.toThrow("Could not open OpenCode event stream");
+      ).rejects.toThrow("Could not open dsh event stream");
       const state = useRuntimeStore.getState();
       expect(state.status).toBe("error");
       expect(state.defaultModel).toBe("anthropic/claude-sonnet-5");
@@ -1860,7 +1860,7 @@ describe("approval mode", () => {
   });
 
   it("holds a ready→connecting blip so a self-recovering stream never repaints the page", async () => {
-    // OpenCode closes /event ~1s after a config PATCH while rebuilding its
+    // dsh closes /event ~1s after a config PATCH while rebuilding its
     // instance; the SDK reconnects in ~250ms. That blip must not reach the UI.
     vi.useFakeTimers();
     try {
@@ -1894,7 +1894,7 @@ describe("approval mode", () => {
 
   it("loadCatalog never clobbers defaultModel while a switch is in flight", async () => {
     // The switch's reconnect fires loadCatalog, whose config read can still
-    // answer with the pre-switch model while OpenCode rebuilds its instance —
+    // answer with the pre-switch model while dsh rebuilds its instance —
     // applying it would visibly bounce the UI back to the previous model.
     try {
       useRuntimeStore.setState({ defaultModel: "moonshot/kimi-k2-thinking", switching: true });
@@ -2044,7 +2044,7 @@ describe("reasoning-effort variant", () => {
 describe("model switch failure state", () => {
   const failReconnect = () =>
     vi.fn(async () => {
-      useRuntimeStore.setState({ status: "error", error: "Could not open OpenCode event stream" });
+      useRuntimeStore.setState({ status: "error", error: "Could not open dsh event stream" });
       return false;
     });
 
@@ -2062,7 +2062,7 @@ describe("model switch failure state", () => {
         useRuntimeStore.getState().setDefaultModel("anthropic/claude-sonnet-5"),
       ).rejects.toThrow();
       expect(useRuntimeStore.getState().modelSwitchError).toBe(
-        "Could not open OpenCode event stream",
+        "Could not open dsh event stream",
       );
     } finally {
       useRuntimeStore.setState({ connectRetry: original });
@@ -2129,7 +2129,7 @@ describe("plan agent mode", () => {
     expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi", undefined);
   });
 
-  it("follows OpenCode's plan_exit Yes-path: a build user message flips the pill", async () => {
+  it("follows dsh's plan_exit Yes-path: a build user message flips the pill", async () => {
     useRuntimeStore.getState().setAgentMode("plan");
     const id = await useRuntimeStore.getState().sendPrompt("plan it");
     expect(useRuntimeStore.getState().sessionAgents[id!]).toBe("plan");
@@ -2159,7 +2159,7 @@ describe("plan agent mode", () => {
 });
 
 // A skill must end up somewhere every workspace can see: the app profile's user
-// skills dir. Writing it into the session's own .opencode/skills/ loses it with
+// skills dir. Writing it into the session's own .dsh/skills/ loses it with
 // that dated folder (#61).
 describe("skill install", () => {
   it("installs a pasted SKILL.md itself — no session, no model turn", async () => {
@@ -2403,7 +2403,7 @@ describe("moving a session into a project", () => {
       sessions: [{ id: "ses_x", title: "B", directory: "/base/old" }],
     });
     mocks.sessionList = [{ id: "ses_x", title: "B", directory: "/base/old" }];
-    mocks.failMove = true; // opencode: "Destination directory belongs to another project"
+    mocks.failMove = true; // dsh: "Destination directory belongs to another project"
 
     // The server rejects, but the app still records the user's intent and the
     // sidebar must group the session under the project immediately.

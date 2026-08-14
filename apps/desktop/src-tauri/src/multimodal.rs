@@ -21,7 +21,7 @@ pub struct MultimodalModels {
 }
 
 fn multimodal_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(xdg_config_home(app)?.join("opencode").join("multimodal.json"))
+    Ok(xdg_config_home(app)?.join("dsh").join("multimodal.json"))
 }
 
 pub(crate) fn read_multimodal(app: &AppHandle) -> Result<MultimodalModels, String> {

@@ -1,18 +1,17 @@
-export { OpenCodeClient, ApiError, isApiStatus } from "./OpenCodeClient";
 export { DshRuntime } from "./dsh/DshRuntime";
 export { DshApiClient, DshRpcError } from "./dsh/DshApiClient";
 export type { DshRuntimeOptions } from "./dsh/DshRuntime";
+export { ApiError, isApiStatus } from "./errors";
 export type { AgentRuntime } from "./runtime";
 export { BaseAgentRuntime } from "./base-runtime";
 export {
   DSH_VERSION,
   DEFAULT_DSH_URL,
-  type OpenCodeEvent,
+  type RuntimeEvent,
   type TextUpdatedEvent,
   type ToolUpdatedEvent,
   type SessionIdleEvent,
   type RuntimeErrorEvent,
-  type OpenCodeClientOptions,
   type RuntimeStatus,
   type ToolCallStatus,
   type SessionMeta,

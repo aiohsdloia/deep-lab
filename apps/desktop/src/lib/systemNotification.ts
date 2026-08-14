@@ -23,7 +23,7 @@ export async function notifyPermissionRequest(input: PermissionNotificationInput
 
   try {
     sendNotification({
-      title: "Open Lab needs your approval",
+      title: "DeepLab needs your approval",
       body: permissionBody(input),
     });
     return true;

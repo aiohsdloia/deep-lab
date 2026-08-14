@@ -7,8 +7,8 @@
 // the user's call — and the gates below exist so it never doubles that cost on
 // turns where there is nothing to review.
 
-/** The reviewer agent the app deploys into the OpenCode profile
- *  (`runtime/opencode-profile/agent/reviewer.md`). */
+/** The reviewer agent the app deploys into the dsh profile
+ *  (`runtime/dsh-profile/agent/reviewer.md`). */
 export const REVIEWER_AGENT = "reviewer";
 
 export const AUTO_REVIEW_KEY = "ai4s.autoReview.v1";

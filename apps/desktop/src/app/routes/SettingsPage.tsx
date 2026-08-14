@@ -60,7 +60,7 @@ import { cn } from "@/lib/cn";
 
 /**
  * Settings. ONE configuration surface: everything talks to the bundled
- * OpenCode's own config/auth API — no separate "model key" concept.
+ * dsh's own config/auth API — no separate "model key" concept.
  */
 export function SettingsPage() {
   // Which settings section is on screen — the sidebar is the navigation.

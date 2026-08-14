@@ -76,7 +76,7 @@ fn probe_managed(name: &str, bin: &Path, version_arg: &str) -> Option<ToolStatus
 }
 
 /// Fall back to the app's own copy when the host probe found nothing. The
-/// user's install always wins: it is what OpenCode's shell tool runs, and
+/// user's install always wins: it is what dsh's shell tool runs, and
 /// relabelling it "app-managed" would be a lie.
 fn or_managed(host: ToolStatus, managed: Option<PathBuf>, version_arg: &str) -> ToolStatus {
     if host.found {
@@ -218,7 +218,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    // The user's own install wins: it is what OpenCode's shell tool runs, so
+    // The user's own install wins: it is what dsh's shell tool runs, so
     // relabelling it "app-managed" would misreport the environment.
     #[cfg(unix)]
     #[test]

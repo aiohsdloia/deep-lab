@@ -8,7 +8,6 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
-use crate::opencode_config::merge_config;
 
 #[derive(Default)]
 struct RuntimeLifecycle {
@@ -60,8 +59,7 @@ pub(crate) fn dsh_home(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(runtime_root(app)?.join("dsh-home"))
 }
 
-/// The sidecar's XDG_DATA_HOME — also where the bundled goal plugin keeps its
-/// per-session state (`opencode-goal-plugin/goals.json`, read by `goal.rs`).
+/// The sidecar's XDG_DATA_HOME.
 pub(crate) fn xdg_data_home(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(runtime_root(app)?.join("xdg-data"))
 }
@@ -118,7 +116,7 @@ fn persisted_path(raw: &str) -> String {
     return raw.to_owned();
 }
 
-/// The active workspace folder OpenCode / the kernel / previews / provenance all
+/// The active workspace folder dsh / the kernel / previews / provenance all
 /// operate in. Defaults to the base folder (`~/Documents/DeepLab`) until the
 /// user opens or creates another one; the choice persists across restarts.
 pub fn workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -241,60 +239,18 @@ pub fn base_workspace_dir(app: &AppHandle) -> Result<PathBuf, String> {
     ensure_base_layout(dir)
 }
 
-/// Path OpenCode reads when XDG_CONFIG_HOME points at our private dir.
-fn opencode_config_file(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(xdg_config_home(app)?.join("opencode").join("opencode.json"))
-}
-
 /// The config file to edit in place: the server may have rewritten the config
-/// as opencode.jsonc — prefer whichever exists, fall back to opencode.json.
+/// as dsh.jsonc — prefer whichever exists, fall back to dsh.json.
 pub(crate) fn effective_config_file(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = xdg_config_home(app)?.join("opencode");
-    Ok(["opencode.jsonc", "opencode.json"]
+    let dir = xdg_config_home(app)?.join("dsh");
+    Ok(["dsh.jsonc", "dsh.json"]
         .iter()
         .map(|n| dir.join(n))
         .find(|p| p.exists())
-        .unwrap_or_else(|| dir.join("opencode.json")))
+        .unwrap_or_else(|| dir.join("dsh.json")))
 }
 
-/// The user's existing OpenCode auth file (their login / free credits), if any.
-/// Read-only: we copy it into our sandbox so the bundled runtime can use the same
-/// login, but we never modify the user's file or sessions.
-fn user_auth_source() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        if !xdg.is_empty() {
-            candidates.push(PathBuf::from(xdg).join("opencode").join("auth.json"));
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        candidates.push(PathBuf::from(&home).join(".local/share/opencode/auth.json"));
-    }
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        candidates.push(PathBuf::from(appdata).join("opencode").join("auth.json"));
-    }
-    candidates.into_iter().find(|p| p.exists())
-}
-
-/// Copy the user's OpenCode CLI login into the app-private data dir, EXPLICITLY
-/// (from the Settings page) — never silently. Returns false when there is no
-/// CLI login to import. Restarts the sidecar so it picks the credentials up.
-#[tauri::command(async)]
-pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> Result<bool, String> {
-    let Some(src) = user_auth_source() else {
-        return Ok(false);
-    };
-    let dst = runtime_root(&app)?.join("xdg-data").join("opencode").join("auth.json");
-    if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::copy(&src, &dst).map_err(|e| format!("copy failed: {e}"))?;
-
-    // Restart the running sidecar so /config/providers reflects the login.
-    restart_sidecar_if_running(&app, &state)?;
-    Ok(true)
-}
-
+/// Copy the user's dsh CLI login into the app-private data dir, EXPLICITLY
 /// Whether the bundled runtime's credential store (its auth.json) has an entry
 /// for this provider. The sidecar writes the token there the moment a browser
 /// login completes, so the UI can fall back on it when the pending OAuth
@@ -303,7 +259,7 @@ pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> 
 pub fn provider_auth_exists(app: AppHandle, provider_id: String) -> Result<bool, String> {
     let path = runtime_root(&app)?
         .join("xdg-data")
-        .join("opencode")
+        .join("dsh")
         .join("auth.json");
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(false); // no store yet — no logins
@@ -417,127 +373,8 @@ Foundational awareness loaded for every session.
     }
 }
 
-const OPENCODE_PLUGIN_PACKAGE: &str = "@opencode-ai/plugin";
-
-fn package_dependency_version(path: &Path, package: &str) -> Option<String> {
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str::<serde_json::Value>(&text)
-        .ok()?
-        .get("dependencies")?
-        .get(package)?
-        .as_str()
-        .map(str::to_owned)
-}
-
-fn installed_package_version(node_modules: &Path, package: &str) -> Option<String> {
-    let package_json = package
-        .split('/')
-        .fold(node_modules.to_path_buf(), |path, part| path.join(part))
-        .join("package.json");
-    let text = std::fs::read_to_string(package_json).ok()?;
-    serde_json::from_str::<serde_json::Value>(&text)
-        .ok()?
-        .get("version")?
-        .as_str()
-        .map(str::to_owned)
-}
-
-/// Deploy OpenCode's plugin SDK before registering the bundled goal plugin.
-/// OpenCode waits for this dependency before opening `/event`; without a local
-/// copy, a fresh install performs a live npm install and an unreachable
-/// registry leaves the desktop on "Connecting" for minutes.
-fn deploy_goal_plugin_dependencies(src: &Path, dst: &Path) -> Result<(), String> {
-    let expected = std::fs::read_to_string(src.join(".opencode-plugin-version"))
-        .map_err(|_| "bundled goal plugin dependencies are missing".to_string())?;
-    let expected = expected.trim();
-    if expected.is_empty() {
-        return Err("bundled OpenCode plugin version is empty".into());
-    }
-
-    let marker = dst.join(".opencode-plugin-version");
-    let package_json = dst.join("package.json");
-    let package_lock = dst.join("package-lock.json");
-    let node_modules = dst.join("node_modules");
-    let dependency_ready =
-        package_dependency_version(&package_json, OPENCODE_PLUGIN_PACKAGE).as_deref()
-            == Some(expected)
-        && installed_package_version(&node_modules, OPENCODE_PLUGIN_PACKAGE).as_deref()
-            == Some(expected)
-        && package_lock.is_file();
-    let ready = dependency_ready
-        && std::fs::read_to_string(&marker)
-            .ok()
-            .is_some_and(|v| v.trim() == expected);
-    if ready {
-        return Ok(());
-    }
-    // Existing app profiles may predate the marker but already have the exact
-    // dependency from OpenCode's old live install. Adopt it without copying the
-    // bundled 60 MB tree over the user's profile.
-    if dependency_ready {
-        return std::fs::write(marker, format!("{expected}\n")).map_err(|e| e.to_string());
-    }
-
-    let src_package = src.join("package.json");
-    let src_lock = src.join("package-lock.json");
-    let src_modules = src.join("node_modules");
-    if !src_package.is_file() || !src_lock.is_file() || !src_modules.is_dir() {
-        return Err("bundled OpenCode plugin dependency tree is incomplete".into());
-    }
-
-    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
-    copy_dir(&src_modules, &node_modules).map_err(|e| e.to_string())?;
-
-    // A fresh app profile has neither file. Existing profiles created by
-    // OpenCode already carry the same dependency; never overwrite a user's
-    // additional plugin dependencies or lockfile.
-    if !package_json.exists() {
-        std::fs::copy(&src_package, &package_json).map_err(|e| e.to_string())?;
-    }
-    if !package_lock.exists() {
-        std::fs::copy(&src_lock, &package_lock).map_err(|e| e.to_string())?;
-    }
-
-    if package_dependency_version(&package_json, OPENCODE_PLUGIN_PACKAGE).as_deref()
-        != Some(expected)
-        || installed_package_version(&node_modules, OPENCODE_PLUGIN_PACKAGE).as_deref()
-            != Some(expected)
-    {
-        return Err("OpenCode plugin dependency version does not match the bundled runtime".into());
-    }
-    std::fs::write(marker, format!("{expected}\n")).map_err(|e| e.to_string())
-}
-
-/// Ship the bundled goal plugin and its already-resolved OpenCode dependency
-/// tree into the app-private profile, then return the plugin's absolute path.
-/// None in dev runs without the fetch script.
-fn deploy_goal_plugin(app: &AppHandle) -> Option<PathBuf> {
-    let resource = app
-        .path()
-        .resolve("goal-plugin", tauri::path::BaseDirectory::Resource)
-        .ok()
-        .filter(|p| p.is_dir())?;
-    let src = resource.join("goal-plugin.server.js");
-    if !src.is_file() {
-        return None;
-    }
-    let config_dir = xdg_config_home(app).ok()?.join("opencode");
-    if let Err(e) = deploy_goal_plugin_dependencies(&resource, &config_dir) {
-        eprintln!("failed to deploy goal plugin dependencies: {e}");
-        return None;
-    }
-    let dst = config_dir.join("goal-plugin.server.js");
-    std::fs::create_dir_all(&config_dir).ok()?;
-    // Refresh on every start so app upgrades replace the plugin in place.
-    if let Err(e) = std::fs::copy(&src, &dst) {
-        eprintln!("failed to deploy goal plugin: {e}");
-        return None;
-    }
-    Some(dst)
-}
-
 /// Deploy the dependency-free guard that removes model-supplied browser launch
-/// overrides before OpenCode forwards a tool call to the official MCP server.
+/// overrides before dsh forwards a tool call to the official MCP server.
 fn deploy_browser_guard_plugin(app: &AppHandle) -> Option<PathBuf> {
     let src = app
         .path()
@@ -547,7 +384,7 @@ fn deploy_browser_guard_plugin(app: &AppHandle) -> Option<PathBuf> {
         )
         .ok()
         .filter(|p| p.is_file())?;
-    let config_dir = xdg_config_home(app).ok()?.join("opencode");
+    let config_dir = xdg_config_home(app).ok()?.join("dsh");
     let dst = config_dir.join("browser-guard.ts");
     std::fs::create_dir_all(&config_dir).ok()?;
     if let Err(e) = std::fs::copy(&src, &dst) {
@@ -557,7 +394,7 @@ fn deploy_browser_guard_plugin(app: &AppHandle) -> Option<PathBuf> {
     Some(dst)
 }
 
-/// Ship app-owned custom tools into OpenCode's global tools directory. These
+/// Ship app-owned custom tools into dsh's global tools directory. These
 /// tools expose safe, declarative host capabilities (for example, asking the
 /// UI to present an existing workspace artifact); they never hand the model a
 /// raw window handle or filesystem access outside the active workspace.
@@ -574,7 +411,7 @@ fn deploy_workbench_tools(app: &AppHandle) {
     let Ok(config_home) = xdg_config_home(app) else {
         return;
     };
-    let dst = config_home.join("opencode").join("tools");
+    let dst = config_home.join("dsh").join("tools");
     if let Err(e) = std::fs::create_dir_all(&dst) {
         eprintln!("failed to create workbench tools directory: {e}");
         return;
@@ -596,13 +433,13 @@ fn deploy_workbench_tools(app: &AppHandle) {
     }
 }
 
-/// App-owned prompt files deployed into the OpenCode profile: the `reviewer`
+/// App-owned prompt files deployed into the dsh profile: the `reviewer`
 /// agent and the commands that invoke it (#72). `(resource dir, profile dir)`.
 const PROFILE_PROMPTS: &[(&str, &str)] =
     &[("profile/agent", "agent"), ("profile/command", "command")];
 
 /// Ship the app's own agent and command definitions into the global profile
-/// (`<xdg-config>/opencode/{agent,command}/`), which OpenCode scans for
+/// (`<xdg-config>/dsh/{agent,command}/`), which dsh scans for
 /// `**/*.md` in every workspace. Refreshed on every sidecar start so app
 /// upgrades replace them in place; files the user added themselves are left
 /// alone, since only our own names are written.
@@ -620,7 +457,7 @@ fn deploy_profile_prompts(app: &AppHandle) {
         if !src.is_dir() {
             continue; // dev run without the bundled resources
         }
-        let dst = config_home.join("opencode").join(dir);
+        let dst = config_home.join("dsh").join(dir);
         if let Err(e) = std::fs::create_dir_all(&dst) {
             eprintln!("failed to create profile {dir} directory: {e}");
             continue;
@@ -701,10 +538,10 @@ fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 }
 
 /// Reserved subdirectory of the profile's global skills dir holding the skills
-/// the USER installs. It lives inside a directory OpenCode already scans
-/// (`<xdg-config>/opencode/skills/`, matched recursively by both skill loaders),
+/// the USER installs. It lives inside a directory dsh already scans
+/// (`<xdg-config>/dsh/skills/`, matched recursively by both skill loaders),
 /// so an installed skill is available in EVERY workspace — a session's own
-/// `.opencode/skills/` would vanish with the next dated session folder (#61).
+/// `.dsh/skills/` would vanish with the next dated session folder (#61).
 /// Bundled-pack pruning skips this name, so app upgrades never delete it.
 const USER_SKILLS_DIR: &str = "user";
 
@@ -740,7 +577,7 @@ fn sanitize_skill_name(name: &str) -> Option<String> {
     ok.then(|| name.to_string())
 }
 
-/// Skill directories in the active workspace's `.opencode/skills/`.
+/// Skill directories in the active workspace's `.dsh/skills/`.
 fn workspace_skill_dirs(workspace: &Path) -> Vec<PathBuf> {
     let root = workspace.join(".dsh").join("skills");
     let Ok(entries) = std::fs::read_dir(&root) else {
@@ -758,7 +595,7 @@ fn dir_name(path: &Path) -> Option<&str> {
 }
 
 /// Install a pasted SKILL.md straight into the profile's user skills dir — no
-/// model turn, no provider needed — and restart the sidecar so OpenCode
+/// model turn, no provider needed — and restart the sidecar so dsh
 /// rediscovers it (discovery is cached per instance). Returns the skill's name.
 #[tauri::command(async)]
 pub fn install_skill_markdown(
@@ -768,10 +605,10 @@ pub fn install_skill_markdown(
 ) -> Result<String, String> {
     let name = skill_name_from_markdown(&text)
         .ok_or_else(|| "not a skill file: it needs YAML frontmatter with a `name:`".to_string())?;
-    // A bundled pack owns its name: two skills sharing one name make OpenCode
+    // A bundled pack owns its name: two skills sharing one name make dsh
     // pick whichever it scanned last, so refuse instead of shadowing.
     if xdg_config_home(&app)?
-        .join("opencode")
+        .join("dsh")
         .join("skills")
         .join(&name)
         .join("SKILL.md")
@@ -786,7 +623,7 @@ pub fn install_skill_markdown(
     Ok(name)
 }
 
-/// Names already in the workspace's `.opencode/skills/`. Taken before an agent
+/// Names already in the workspace's `.dsh/skills/`. Taken before an agent
 /// install runs so `adopt_workspace_skills` can tell what it added.
 #[tauri::command(async)]
 pub fn workspace_skill_names(app: AppHandle) -> Result<Vec<String>, String> {
@@ -800,7 +637,7 @@ pub fn workspace_skill_names(app: AppHandle) -> Result<Vec<String>, String> {
 /// user skills dir, so they outlive that session's folder. `known` is the
 /// pre-install listing — a pinned project's own skills stay project-scoped.
 /// The workspace copy is dropped once the profile copy is in place: leaving both
-/// would give OpenCode two skills with the same name, and it then picks whichever
+/// would give dsh two skills with the same name, and it then picks whichever
 /// it scanned last. Restarts the sidecar when anything moved; returns the names.
 #[tauri::command(async)]
 pub fn adopt_workspace_skills(
@@ -918,7 +755,7 @@ pub(crate) fn enriched_path() -> String {
 /// On-disk path of a bundled sidecar (`externalBin`), if it is there. Tauri
 /// places them next to the app executable with the target-triple suffix
 /// stripped. Needed whenever something other than `ShellExt::sidecar` has to
-/// reach one: OpenCode spawning an MCP server by path, or a synchronous probe.
+/// reach one: dsh spawning an MCP server by path, or a synchronous probe.
 pub(crate) fn sidecar_bin(name: &str) -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
@@ -945,7 +782,7 @@ pub(crate) fn quiet_command(bin: impl AsRef<std::ffi::OsStr>) -> std::process::C
 
 /// Make a secret-holding path owner-only: 700 for directories, 600 for files
 /// (unix). The runtime root carries provider/connector API keys in
-/// `opencode.jsonc`/`auth.json`, and the sidecar rewrites those files with a
+/// `dsh.jsonc`/`auth.json`, and the sidecar rewrites those files with a
 /// default umask while running — locking the DIRECTORY is what holds, since a
 /// 700 dir is unreachable for other users whatever the file modes inside. On
 /// Windows, %APPDATA% is per-user ACL'd already; nothing to do.
@@ -1123,7 +960,7 @@ fn validate_mirror_url(url: &str) -> Result<(), String> {
 }
 
 /// Network env for the bundled uv sidecar (managed-Python download + pip
-/// install). Mirrors the OpenCode sidecar's proxy so first-run provisioning
+/// install). Mirrors the dsh sidecar's proxy so first-run provisioning
 /// works behind the same proxy the agent uses, and adds the optional PyPI /
 /// Python-download mirrors. uv reads HTTP(S)_PROXY, `UV_DEFAULT_INDEX` and
 /// `UV_PYTHON_INSTALL_MIRROR` from its environment.
@@ -1140,8 +977,8 @@ pub(crate) fn uv_network_env(app: &AppHandle) -> Vec<(&'static str, String)> {
     env
 }
 
-/// Proxy env for a bundled sidecar OTHER than opencode (e.g. agent-browser's
-/// Chrome download). Same resolution as the OpenCode sidecar so a first-run
+/// Proxy env for a bundled sidecar OTHER than dsh (e.g. agent-browser's
+/// Chrome download). Same resolution as the dsh sidecar so a first-run
 /// browser install works behind the user's configured proxy, without the uv
 /// mirror vars that only uv understands.
 pub(crate) fn sidecar_proxy_env(app: &AppHandle) -> Vec<(&'static str, String)> {
@@ -1360,7 +1197,7 @@ pub(crate) fn restart_sidecar_if_running(
     Ok(Some(url))
 }
 
-/// Start the bundled OpenCode (idempotent). Returns its base URL. `async`:
+/// Start the bundled dsh (idempotent). Returns its base URL. `async`:
 /// skill-pack deployment + process spawn at startup must not block the UI
 /// thread while the first window paints.
 #[tauri::command(async)]
@@ -1400,7 +1237,7 @@ pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<S
 }
 
 /// The workspace directory the sidecar runs in — the frontend passes it to the
-/// SDK so skill discovery is scoped to the right OpenCode instance.
+/// SDK so skill discovery is scoped to the right dsh instance.
 #[tauri::command]
 pub fn workspace_path(app: AppHandle) -> Result<String, String> {
     Ok(workspace_dir(&app)?.to_string_lossy().to_string())
@@ -1462,7 +1299,7 @@ pub fn set_workspace(
     // (external editor, detached process) in the new workspace are captured too.
     crate::git_snapshot::watch_workspace(&canon);
 
-    // No sidecar restart: OpenCode serves every folder from one process via
+    // No sidecar restart: dsh serves every folder from one process via
     // per-directory instances, and the frontend reconnects its event stream
     // with `?directory=<new folder>`. Restarting here used to cost 3-6 s per
     // history-session switch (process boot + reconnect polling).
@@ -1602,7 +1439,7 @@ pub fn write_export_file(
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Kill the bundled OpenCode if running.
+/// Kill the bundled dsh if running.
 #[tauri::command]
 pub fn stop_runtime(state: State<'_, RuntimeState>) {
     let mut lifecycle = state.lifecycle.lock().unwrap();
@@ -1627,7 +1464,7 @@ pub fn kill_child(state: &RuntimeState) {
 #[cfg(test)]
 mod tests {
     use super::{
-        auth_has_provider, deploy_goal_plugin_dependencies, parse_scutil_proxy,
+        auth_has_provider, parse_scutil_proxy,
         ensure_base_layout, prune_stale_skills, random_hex, remove_key_from_config,
         resolve_proxy_env, skill_name_from_markdown, sync_skill_pack, validate_proxy_url,
         workspace_skill_dirs,
@@ -1815,7 +1652,7 @@ mod tests {
         let found = workspace_skill_dirs(&ws);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].file_name().unwrap(), "installed");
-        // A workspace with no .opencode/skills at all is simply empty.
+        // A workspace with no .dsh/skills at all is simply empty.
         assert!(workspace_skill_dirs(&std::env::temp_dir().join("os-nope")).is_empty());
         let _ = fs::remove_dir_all(&ws);
     }
@@ -1825,14 +1662,14 @@ mod tests {
     fn tighten_private_makes_dir_and_secrets_owner_only() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("os-private-{}", std::process::id()));
-        let sub = dir.join("opencode");
+        let sub = dir.join("dsh");
         fs::create_dir_all(&sub).unwrap();
-        let cfg = sub.join("opencode.jsonc");
+        let cfg = sub.join("dsh.jsonc");
         fs::write(&cfg, b"{\"apiKey\":\"secret\"}").unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
         fs::set_permissions(&cfg, fs::Permissions::from_mode(0o644)).unwrap();
 
-        // The runtime root holds provider/connector keys (opencode.jsonc,
+        // The runtime root holds provider/connector keys (dsh.jsonc,
         // auth.json) — it must be unreadable to other users even when the
         // sidecar later rewrites files inside with a default umask.
         super::tighten_private(&dir);
@@ -1871,72 +1708,6 @@ mod tests {
     fn write(path: &std::path::Path, content: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
-    }
-
-    #[test]
-    fn deploys_goal_plugin_dependencies_without_network() {
-        let tmp = std::env::temp_dir().join(format!("goal-deps-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&tmp);
-        let src = tmp.join("src");
-        let dst = tmp.join("dst");
-        write(&src.join(".opencode-plugin-version"), "1.17.13\n");
-        write(
-            &src.join("package.json"),
-            r#"{"dependencies":{"@opencode-ai/plugin":"1.17.13"}}"#,
-        );
-        write(&src.join("package-lock.json"), "{}");
-        write(
-            &src.join("node_modules/@opencode-ai/plugin/package.json"),
-            r#"{"name":"@opencode-ai/plugin","version":"1.17.13"}"#,
-        );
-        write(
-            &src.join("node_modules/@opencode-ai/plugin/dist/tool.js"),
-            "export const tool = (x) => x;",
-        );
-
-        deploy_goal_plugin_dependencies(&src, &dst).unwrap();
-
-        assert_eq!(
-            fs::read_to_string(dst.join(".opencode-plugin-version")).unwrap(),
-            "1.17.13\n"
-        );
-        assert!(dst
-            .join("node_modules/@opencode-ai/plugin/dist/tool.js")
-            .is_file());
-        assert!(dst.join("package-lock.json").is_file());
-        fs::remove_dir_all(&tmp).unwrap();
-    }
-
-    #[test]
-    fn adopts_existing_goal_plugin_dependencies_without_recopying() {
-        let tmp =
-            std::env::temp_dir().join(format!("goal-deps-existing-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&tmp);
-        let src = tmp.join("src");
-        let dst = tmp.join("dst");
-        write(&src.join(".opencode-plugin-version"), "1.17.13\n");
-        write(
-            &dst.join("package.json"),
-            r#"{"dependencies":{"@opencode-ai/plugin":"1.17.13","user-plugin":"2.0.0"}}"#,
-        );
-        write(&dst.join("package-lock.json"), "{}");
-        write(
-            &dst.join("node_modules/@opencode-ai/plugin/package.json"),
-            r#"{"name":"@opencode-ai/plugin","version":"1.17.13"}"#,
-        );
-        write(&dst.join("node_modules/user-plugin/keep.txt"), "keep");
-
-        deploy_goal_plugin_dependencies(&src, &dst).unwrap();
-
-        assert_eq!(
-            fs::read_to_string(dst.join(".opencode-plugin-version")).unwrap(),
-            "1.17.13\n"
-        );
-        assert_eq!(
-            fs::read_to_string(dst.join("node_modules/user-plugin/keep.txt")).unwrap(),
-            "keep"
-        );
-        fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[test]
@@ -1992,7 +1763,7 @@ mod tests {
     }
 }
 
-/// Remove an entry from a map section of the app-private global OpenCode
+/// Remove an entry from a map section of the app-private global dsh
 /// config ("provider" or "mcp") and restart the sidecar (PATCH /global/config
 /// cannot delete keys).
 #[tauri::command(async)]
@@ -2005,13 +1776,13 @@ pub fn remove_config_entry(
     if !matches!(section.as_str(), "provider" | "mcp") {
         return Err(format!("section \"{section}\" is not removable"));
     }
-    let dir = xdg_config_home(&app)?.join("opencode");
-    // The server writes opencode.jsonc; older configs may be opencode.json.
-    let path = ["opencode.jsonc", "opencode.json"]
+    let dir = xdg_config_home(&app)?.join("dsh");
+    // The server writes dsh.jsonc; older configs may be dsh.json.
+    let path = ["dsh.jsonc", "dsh.json"]
         .iter()
         .map(|n| dir.join(n))
         .find(|p| p.exists())
-        .ok_or("no global OpenCode config found")?;
+        .ok_or("no global dsh config found")?;
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let out = remove_key_from_config(&text, &section, &key)?;
     std::fs::write(&path, out).map_err(|e| e.to_string())?;
@@ -2043,8 +1814,8 @@ fn remove_key_from_config(text: &str, section: &str, key: &str) -> Result<String
 pub fn get_approval_mode(app: AppHandle) -> Result<String, String> {
     let path = effective_config_file(&app)?;
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    Ok(crate::opencode_config::permission_mode_of(&existing)
-        .unwrap_or(crate::opencode_config::MODE_APPROVE)
+    Ok(crate::dsh_config::permission_mode_of(&existing)
+        .unwrap_or(crate::dsh_config::MODE_APPROVE)
         .to_string())
 }
 
@@ -2058,14 +1829,14 @@ pub fn set_approval_mode(
 ) -> Result<String, String> {
     let path = effective_config_file(&app)?;
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    let updated = crate::opencode_config::set_permission_mode(&existing, &mode)?;
+    let updated = crate::dsh_config::set_permission_mode(&existing, &mode)?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, updated).map_err(|e| e.to_string())?;
     tighten_private(&path);
 
-    // Same restart flow as configure_opencode: reload rules on a stable port.
+    // Same restart flow as a settings change: reload rules on a stable port.
     Ok(restart_sidecar_if_running(&app, &state)?
         .unwrap_or_else(|| path.to_string_lossy().to_string()))
 }
@@ -2078,13 +1849,13 @@ fn global_memory_file(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Absolute path of a memory file, forward-slashed so the config stays
 /// portable. `scope` is "global" (the profile file) or "project" (that
-/// folder's own AGENTS.md — the file OpenCode loads for sessions inside it).
+/// folder's own AGENTS.md — the file dsh loads for sessions inside it).
 fn memory_file(app: &AppHandle, scope: &str, directory: Option<&str>) -> Result<PathBuf, String> {
     match scope {
         "global" => global_memory_file(app),
         "project" => {
             let dir = directory.filter(|d| !d.is_empty()).ok_or("no project folder")?;
-            Ok(PathBuf::from(dir).join(crate::opencode_config::PROJECT_MEMORY_FILE))
+            Ok(PathBuf::from(dir).join(crate::dsh_config::PROJECT_MEMORY_FILE))
         }
         other => Err(format!("unknown memory scope \"{other}\"")),
     }
@@ -2156,7 +1927,7 @@ pub fn append_memory(
 pub fn get_memory_enabled(app: AppHandle) -> Result<bool, String> {
     let global = global_memory_file(&app)?.to_string_lossy().replace('\\', "/");
     let existing = std::fs::read_to_string(effective_config_file(&app)?).unwrap_or_default();
-    Ok(crate::opencode_config::memory_enabled(&existing, &global))
+    Ok(crate::dsh_config::memory_enabled(&existing, &global))
 }
 
 /// Apply or stop applying the memory layers, restarting the sidecar so the
@@ -2170,7 +1941,7 @@ pub fn set_memory_enabled(
     let global = global_memory_file(&app)?.to_string_lossy().replace('\\', "/");
     let path = effective_config_file(&app)?;
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    let Some(updated) = crate::opencode_config::set_memory_enabled(&existing, &global, enabled)
+    let Some(updated) = crate::dsh_config::set_memory_enabled(&existing, &global, enabled)
     else {
         return Ok(()); // already in the requested state — no restart
     };
@@ -2188,7 +1959,7 @@ pub fn set_memory_enabled(
 pub fn get_agent_models(app: AppHandle) -> Result<serde_json::Value, String> {
     let existing = std::fs::read_to_string(effective_config_file(&app)?).unwrap_or_default();
     let map: serde_json::Map<String, serde_json::Value> =
-        crate::opencode_config::agent_models(&existing)
+        crate::dsh_config::agent_models(&existing)
             .into_iter()
             .map(|(k, v)| (k, serde_json::Value::String(v)))
             .collect();
@@ -2200,7 +1971,7 @@ pub fn get_agent_models(app: AppHandle) -> Result<serde_json::Value, String> {
 pub fn get_agent_variants(app: AppHandle) -> Result<serde_json::Value, String> {
     let existing = std::fs::read_to_string(effective_config_file(&app)?).unwrap_or_default();
     let map: serde_json::Map<String, serde_json::Value> =
-        crate::opencode_config::agent_variants(&existing)
+        crate::dsh_config::agent_variants(&existing)
             .into_iter()
             .map(|(k, v)| (k, serde_json::Value::String(v)))
             .collect();
@@ -2240,7 +2011,7 @@ pub fn set_agent_model(
 ) -> Result<(), String> {
     write_agent_config(&app, &state, |existing| {
         let want = if model.is_empty() { None } else { Some(model.as_str()) };
-        crate::opencode_config::set_agent_model(existing, &agent, want)
+        crate::dsh_config::set_agent_model(existing, &agent, want)
     })
 }
 
@@ -2255,7 +2026,7 @@ pub fn set_agent_variant(
 ) -> Result<(), String> {
     write_agent_config(&app, &state, |existing| {
         let want = if variant.is_empty() { None } else { Some(variant.as_str()) };
-        crate::opencode_config::set_agent_variant(existing, &agent, want)
+        crate::dsh_config::set_agent_variant(existing, &agent, want)
     })
 }
 
@@ -2323,31 +2094,6 @@ pub fn set_mirror_setting(app: AppHandle, pypi: String, python: String) -> Resul
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, lines.join("\n")).map_err(|e| e.to_string())
-}
-
-/// Write the provider key/model into the app-private OpenCode config and restart
-/// the sidecar so it picks them up. Returns the same base URL (stable port).
-#[tauri::command(async)]
-pub fn configure_opencode(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-    provider: String,
-    api_key: String,
-    model: String,
-    base_url: Option<String>,
-) -> Result<String, String> {
-    let path = opencode_config_file(&app)?;
-    let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    let merged = merge_config(&existing, &provider, &api_key, &model, base_url.as_deref())?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, merged).map_err(|e| e.to_string())?;
-    tighten_private(&path);
-
-    // Restart so the running server reloads the new provider config.
-    Ok(restart_sidecar_if_running(&app, &state)?
-        .unwrap_or_else(|| path.to_string_lossy().to_string()))
 }
 
 #[cfg(test)]

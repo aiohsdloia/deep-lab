@@ -2,7 +2,7 @@
 // gateway (src-tauri/src/gateway.rs) and running in a plain browser (phone / LAN
 // / tunnel) instead of the Tauri webview. The gateway injects `window.__OS_WEB__`
 // into index.html; the user pastes a bearer token once. Everything else is the
-// identical desktop app talking to the gateway, which proxies OpenCode.
+// identical desktop app talking to the gateway, which proxies dsh.
 // See docs/rfc/remote-access-gateway.md.
 
 const w = typeof window !== "undefined" ? (window as unknown as { __OS_WEB__?: boolean }) : undefined;
@@ -76,7 +76,7 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 let guardInstalled = false;
 
 /** Wrap window.fetch (once) so a 401 from the same-origin gateway clears the
- *  token and triggers re-auth. Must run BEFORE OpenCodeClient binds fetch. */
+ *  token and triggers re-auth. Must run BEFORE dshClient binds fetch. */
 export function installGatewayAuthGuard(): void {
   if (guardInstalled || !isGatewayWeb || typeof window === "undefined") return;
   guardInstalled = true;

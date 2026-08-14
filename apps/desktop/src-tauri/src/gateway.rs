@@ -2,7 +2,7 @@
 // agent runtime + workspace files to CLI / LAN-web / tunnel clients. Loopback by
 // default; LAN (0.0.0.0) is an explicit opt-in. Std-only `TcpListener` with a
 // thread per connection (mirrors `preview_server.rs`) — no new crates: agent
-// calls proxy to the loopback OpenCode sidecar with the already-present blocking
+// calls proxy to the loopback dsh sidecar with the already-present blocking
 // `reqwest`, adding the sidecar's per-run Basic-auth password itself; file calls
 // reuse `artifact_file`. A small self-contained web client ships at `/`.
 //
@@ -26,7 +26,7 @@ use crate::runtime::{random_hex, runtime_root, sidecar_url, tighten_private, wor
 /// bookmarked URL / QR survives restarts; falls back to an ephemeral port.
 const PREFERRED_PORT: u16 = 4098;
 
-/// SPA route roots (client-side routes served by index.html, not the OpenCode
+/// SPA route roots (client-side routes served by index.html, not the dsh
 /// proxy). Everything else that isn't a static asset is proxied to the sidecar.
 const SPA_ROOTS: &[&str] = &["live", "example", "skills", "notebooks", "files", "runs", "projects", "settings"];
 
@@ -384,7 +384,7 @@ fn route(stream: &mut TcpStream, req: &Request, ctx: &Ctx) {
         stream_api(stream, ctx, path);
         return;
     }
-    proxy_opencode(stream, req, ctx);
+    proxy_dsh(stream, req, ctx);
 }
 
 /// The versioned contract surface (CLI / curl / the SPA's file browser).
@@ -488,9 +488,9 @@ fn serve_index(stream: &mut TcpStream, ctx: &Ctx) {
     }
 }
 
-/// Whether a GET path is a static frontend asset (vs an OpenCode API path or a
+/// Whether a GET path is a static frontend asset (vs an dsh API path or a
 /// client-side route). Vite emits everything hashed under `/assets/`; a few root
-/// files carry a known extension. OpenCode paths and SPA routes are extensionless.
+/// files carry a known extension. dsh paths and SPA routes are extensionless.
 fn looks_static(path: &str) -> bool {
     if path.starts_with("/assets/") {
         return true;
@@ -507,7 +507,7 @@ fn looks_static(path: &str) -> bool {
 }
 
 /// Serve a bundled static asset (JS/CSS/fonts/images). Returns false if there is
-/// no such asset (the caller then decides: SPA route vs OpenCode proxy).
+/// no such asset (the caller then decides: SPA route vs dsh proxy).
 fn serve_asset(stream: &mut TcpStream, ctx: &Ctx, path: &str) -> bool {
     let key = path.trim_start_matches('/');
     match ctx.app.asset_resolver().get(key.to_string()) {
@@ -522,7 +522,7 @@ fn serve_asset(stream: &mut TcpStream, ctx: &Ctx, path: &str) -> bool {
 /// Transparently proxy any dsh `/api` HTTP call to the loopback sidecar.
 /// dsh serves loopback-only with a browser-trust fence; the gateway token is
 /// the only auth the remote client needs.
-fn proxy_opencode(stream: &mut TcpStream, req: &Request, ctx: &Ctx) {
+fn proxy_dsh(stream: &mut TcpStream, req: &Request, ctx: &Ctx) {
     let base = match endpoint(ctx) {
         Some(v) => v,
         None => return respond_json(stream, 503, "{\"error\":\"runtime not started\"}"),
@@ -918,15 +918,15 @@ fn authed(req: &Request, token: &str) -> bool {
                 return true;
             }
         }
-        // Basic base64("opencode:<token>") — the SPA's own OpenCodeClient, which
-        // speaks OpenCode's Basic auth; we accept the gateway token as its password.
+        // Basic base64("dsh:<token>") — the SPA's own dshClient, which
+        // speaks dsh's Basic auth; we accept the gateway token as its password.
         if let Some(b) = h.strip_prefix("Basic ") {
             if ct_eq(b.trim(), &expected_basic(token)) {
                 return true;
             }
         }
     }
-    // Header-less clients: ?token= (fetch links), ?auth_token= (OpenCodeClient SSE).
+    // Header-less clients: ?token= (fetch links), ?auth_token= (dshClient SSE).
     if let Some(t) = req.query_get("token") {
         if ct_eq(&t, token) {
             return true;
@@ -940,10 +940,10 @@ fn authed(req: &Request, token: &str) -> bool {
     false
 }
 
-/// The `Authorization: Basic` value OpenCodeClient sends when the gateway token
-/// is used as its password: base64("opencode:<token>").
+/// The `Authorization: Basic` value dshClient sends when the gateway token
+/// is used as its password: base64("dsh:<token>").
 fn expected_basic(token: &str) -> String {
-    base64_encode(format!("opencode:{token}").as_bytes())
+    base64_encode(format!("dsh:{token}").as_bytes())
 }
 
 fn base64_encode(input: &[u8]) -> String {
@@ -1121,36 +1121,6 @@ pub fn gateway_status(app: AppHandle, state: State<'_, GatewayState>) -> Gateway
     status_of(&app, state.inner())
 }
 
-/// Absolute path of the bundled ACP agent script (#14, server direction), or
-/// None when it is missing.
-///
-/// An external editor integrates with an ACP agent by SPAWNING it — stdio is the
-/// only transport the protocol stabilizes — so what Settings has to show the
-/// user is a command, and a command needs a real path inside the installed app.
-/// The script drives this same gateway with a token, so nothing new is exposed:
-/// an editor gets exactly the access the token already carries.
-#[tauri::command]
-pub fn acp_server_script(app: AppHandle) -> Option<String> {
-    let path = app
-        .path()
-        .resolve("acp-server/acp-server.mjs", tauri::path::BaseDirectory::Resource)
-        .ok()?;
-    path.exists().then(|| path.to_string_lossy().to_string())
-}
-
-/// Absolute path of the bundled DeepSeek Harness ACP launcher, or null when the
-/// runtime was not fetched (dev tree without `scripts/dev/fetch-dsh-acp.sh`).
-/// The launcher re-anchors the dsh demo bin onto its own directory so the app
-/// can spawn it in any workspace folder.
-#[tauri::command]
-pub fn dsh_acp_launcher(app: AppHandle) -> Option<String> {
-    let path = app
-        .path()
-        .resolve("dsh-acp/launcher.mjs", tauri::path::BaseDirectory::Resource)
-        .ok()?;
-    path.exists().then(|| path.to_string_lossy().to_string())
-}
-
 #[tauri::command(async)]
 pub fn set_gateway_config(
     app: AppHandle,
@@ -1239,9 +1209,9 @@ mod tests {
     }
 
     #[test]
-    fn base64_matches_opencode_basic_auth() {
-        // Must equal btoa("opencode:<token>") that OpenCodeClient sends.
-        assert_eq!(base64_encode(b"opencode:abc"), "b3BlbmNvZGU6YWJj");
+    fn base64_matches_dsh_basic_auth() {
+        // Must equal btoa("dsh:<token>") that dshClient sends.
+        assert_eq!(base64_encode(b"dsh:abc"), "ZHNoOmFiYw==");
         assert_eq!(base64_encode(b""), "");
         assert_eq!(base64_encode(b"f"), "Zg==");
         assert_eq!(base64_encode(b"fo"), "Zm8=");
@@ -1254,7 +1224,7 @@ mod tests {
         assert!(looks_static("/assets/index-CK0bI0S9.js"));
         assert!(looks_static("/assets/index-abc.css"));
         assert!(looks_static("/favicon.ico"));
-        // OpenCode API paths → must NOT be treated as assets (else index.html
+        // dsh API paths → must NOT be treated as assets (else index.html
         // gets served and EventSource/JSON break).
         assert!(!looks_static("/event"));
         assert!(!looks_static("/experimental/session"));

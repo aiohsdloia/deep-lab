@@ -89,13 +89,13 @@ function isSessionEventFrame(frame: MuxFrame): frame is { type: "session/event";
 /**
  * The DeepSeek Harness runtime, speaking the dsh `/api` HTTP+SSE gateway.
  *
- * Implements the same {@link AgentRuntime} seam as `OpenCodeClient`, so the
- * whole Open Lab UI (threads, provenance, runs, review) is unchanged. The mux
- * and host event streams are folded into the normalized OpenCode events the
+ * Implements the {@link AgentRuntime} seam, so the whole DeepLab UI (threads,
+ * provenance, runs, review) is unchanged. The mux and host event streams are
+ * folded into the normalized runtime events the
  * app consumes. Model/provider config and MCP are mapped onto dsh's
  * `llm.*` / `credentials.*` / `settings.*` domains where dsh exposes an
- * equivalent; OpenCode-only endpoints that dsh v1 does not expose degrade to a
- * clear error (documented in PROGRESS.md).
+ * equivalent; endpoints that dsh v1 does not expose degrade to a clear error
+ * (documented in PROGRESS.md).
  */
 export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   readonly baseUrl: string;
@@ -837,7 +837,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     );
   }
 
-  /** Exposed for parity with OpenCodeClient's seam (used by tests/setup). */
+  /** Exposed for parity with the AgentRuntime seam (used by tests/setup). */
   async listQuestionsRaw(): Promise<Array<{ type: string }>> {
     return [];
   }

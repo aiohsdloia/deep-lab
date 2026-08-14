@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 // DOM stubs — only in a browser-like (jsdom) environment. The node-env tests
-// (e.g. the OpenCode integration test) skip these.
+// (e.g. the dsh integration test) skip these.
 if (typeof window !== "undefined") {
   if (!("ResizeObserver" in globalThis)) {
     (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {

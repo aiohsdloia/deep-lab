@@ -100,7 +100,7 @@ export function AppShell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [splitDisabled]);
-  // In the packaged desktop app, auto-start the bundled OpenCode and connect,
+  // In the packaged desktop app, auto-start the bundled DeepSeek Harness and connect,
   // and bring the Jupyter server back up if the user enabled it before.
   useEffect(() => {
     if (isGatewayWeb && !webReady) return; // wait for the token gate
@@ -199,7 +199,7 @@ export function AppShell() {
   }
 
   // A screen detached into its own window: no sidebar — just the pane surface.
-  // Bootstrap still runs (above) so it connects to the same OpenCode runtime.
+  // Bootstrap still runs (above) so it connects to the same dsh runtime.
   if (isDetachedScreen) {
     return (
       <div className="flex h-screen w-screen overflow-hidden text-text">

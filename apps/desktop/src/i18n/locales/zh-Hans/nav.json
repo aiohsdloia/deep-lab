@@ -24,7 +24,7 @@
     "menuScratch": "从零开始",
     "menuExisting": "使用已有文件夹",
     "importTitle": "导入已有文件夹",
-    "importSubtitle": "选择 Open Lab 使用“{{name}}”的方式。",
+    "importSubtitle": "选择 DeepLab 使用“{{name}}”的方式。",
     "importCopy": "复制到工作区",
     "importCopyHint": "创建由应用管理的副本，原文件保持不变，但会占用额外磁盘空间。",
     "importInPlace": "原地使用",

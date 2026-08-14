@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // The palette is the single source of truth shared with index.css --series-*
-// and runtime/.../openlab.mplstyle. Lock the hexes so those three stay in sync.
+// and runtime/.../deeplab.mplstyle. Lock the hexes so those three stay in sync.
 describe("chart palette (single source of truth)", () => {
   it("assigns categorical hues in fixed order and wraps only past 8", () => {
     expect(CHART_PALETTE_LIGHT.categorical).toEqual([

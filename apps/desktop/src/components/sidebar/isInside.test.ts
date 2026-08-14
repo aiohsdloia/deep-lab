@@ -3,15 +3,15 @@ import { isInside } from "./Sidebar";
 
 describe("isInside", () => {
   it("recognizes a folder inside the workspace, at any depth", () => {
-    expect(isInside("/Users/a/Documents/OpenLab/仙侠克苏鲁", "/Users/a/Documents/OpenLab")).toBe(true);
-    expect(isInside("/Users/a/Documents/OpenLab/projects/bci", "/Users/a/Documents/OpenLab")).toBe(true);
-    expect(isInside("/Users/a/Documents/OpenLab", "/Users/a/Documents/OpenLab")).toBe(true);
+    expect(isInside("/Users/a/Documents/DeepLab/仙侠克苏鲁", "/Users/a/Documents/DeepLab")).toBe(true);
+    expect(isInside("/Users/a/Documents/DeepLab/projects/bci", "/Users/a/Documents/DeepLab")).toBe(true);
+    expect(isInside("/Users/a/Documents/DeepLab", "/Users/a/Documents/DeepLab")).toBe(true);
   });
 
   it("compares whole segments — a shared prefix is not containment", () => {
     // The bug a naive startsWith would have: this folder is NOT in the workspace.
-    expect(isInside("/Users/a/Documents/OpenLab-old/x", "/Users/a/Documents/OpenLab")).toBe(false);
-    expect(isInside("/Users/a/Documents/Other", "/Users/a/Documents/OpenLab")).toBe(false);
+    expect(isInside("/Users/a/Documents/DeepLab-old/x", "/Users/a/Documents/DeepLab")).toBe(false);
+    expect(isInside("/Users/a/Documents/Other", "/Users/a/Documents/DeepLab")).toBe(false);
   });
 
   it("ignores trailing slashes and doubled separators", () => {
@@ -20,8 +20,8 @@ describe("isInside", () => {
   });
 
   it("handles Windows separators", () => {
-    expect(isInside("C:\\Users\\a\\OpenLab\\proj", "C:\\Users\\a\\OpenLab")).toBe(true);
-    expect(isInside("C:\\Users\\a\\Elsewhere", "C:\\Users\\a\\OpenLab")).toBe(false);
+    expect(isInside("C:\\Users\\a\\DeepLab\\proj", "C:\\Users\\a\\DeepLab")).toBe(true);
+    expect(isInside("C:\\Users\\a\\Elsewhere", "C:\\Users\\a\\DeepLab")).toBe(false);
   });
 
   it("treats an empty base as containing nothing", () => {

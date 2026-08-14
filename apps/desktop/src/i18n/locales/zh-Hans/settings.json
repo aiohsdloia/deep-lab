@@ -40,11 +40,11 @@
   },
   "page": {
     "title": "设置",
-    "subtitle": "此处的所有设置都配置内置的 OpenCode 运行时——一份配置，无需重复。"
+    "subtitle": "此处的所有设置都配置内置的 DeepSeek Harness 运行时——一份配置，无需重复。"
   },
   "runtime": {
     "title": "代理运行时",
-    "hint": "opencode serve，通过其 HTTP + SSE API 驱动",
+    "hint": "内置的 dsh 侧车，通过其 HTTP + WebSocket API 驱动",
     "connect": "连接",
     "disconnect": "断开连接",
     "serverLabel": "服务器",
@@ -63,26 +63,6 @@
     "mirrorPypiPlaceholder": "https://pypi.tuna.tsinghua.edu.cn/simple",
     "mirrorPythonPlaceholder": "https://mirror.example.com/python-build-standalone",
     "mirrorHint": "可选镜像,仅在设置 Python 工具(Jupyter、科学数据库)下载时使用,适合 pypi.org / github.com 访问缓慢的网络。留空则使用默认源。"
-  },
-  "acp": {
-    "title": "智能体",
-    "hint": "本应用驱动哪个智能体：内置的 OpenCode 运行时，或任何通过 stdio 使用 Agent Client Protocol（ACP）的智能体。",
-    "bundled": "OpenCode（内置）",
-    "bundledHint": "默认运行时——模型供应商、技能、计划模式与已保存的会话。",
-    "add": "添加智能体",
-    "edit": "编辑",
-    "remove": "删除",
-    "nameLabel": "名称",
-    "namePlaceholder": "名称（Codex、Gemini CLI…）",
-    "commandLabel": "命令",
-    "commandPlaceholder": "命令（npx、gemini…）",
-    "argsLabel": "参数",
-    "argsPlaceholder": "参数（-y @agentclientprotocol/codex-acp）",
-    "limits": "ACP 智能体以命令形式运行在本机的当前工作区文件夹中。它自行管理模型、技能与历史记录，因此模型选择器、计划模式和已保存的会话仍属于 OpenCode——在 ACP 智能体上创建的会话仅在应用运行期间列出。",
-    "running": "已连接到 ACP 智能体。",
-    "starting": "正在启动 ACP 智能体…",
-    "copyError": "复制错误",
-    "copiedError": "错误已复制"
   },
   "updates": {
     "title": "应用更新",
@@ -138,7 +118,7 @@
   },
   "providers": {
     "title": "供应商",
-    "hint": "登录认证、自定义端点和导入的 OpenCode 登录信息",
+    "hint": "登录认证、自定义端点和导入的 DeepSeek 登录信息",
     "connectPrompt": "连接运行时以管理提供商。",
     "manage": "管理",
     "collapse": "收起",
@@ -167,8 +147,7 @@
     "fetchModels": "获取模型",
     "fetchingModels": "获取中…",
     "noModelsFound": "端点未返回任何模型。",
-    "addEndpoint": "添加端点",
-    "importLogin": "已经在使用 OpenCode CLI？导入其登录信息"
+    "addEndpoint": "添加端点"
   },
   "mcp": {
     "title": "MCP 服务器",
@@ -270,8 +249,6 @@
     "couldNotRemoveMcp": "无法移除 MCP 服务器",
     "mcpRemoved": "MCP 服务器 {{name}} 已移除",
     "importFailed": "导入失败",
-    "noOpenCodeLoginFound": "在此计算机上未找到 OpenCode CLI 登录信息。",
-    "importedLogin": "已导入您的 OpenCode CLI 登录信息。",
     "couldNotSetProxy": "无法应用代理设置",
     "proxyApplied": "代理设置已生效",
     "mirrorSaved": "镜像设置已保存",
@@ -348,8 +325,8 @@
     },
     "workdir": {
       "label": "默认工作目录",
-      "hint": "任务文件夹将放在 <workdir>/jobs/<name>。留空则使用 SSH 家目录下的 openlab/jobs。",
-      "placeholder": "例如 ~/openlab",
+      "hint": "任务文件夹将放在 <workdir>/jobs/<name>。留空则使用 SSH 家目录下的 deeplab/jobs。",
+      "placeholder": "例如 ~/deeplab",
       "save": "保存",
       "saveFailed": "无法保存工作目录",
       "saved": "工作目录已保存"
@@ -399,10 +376,7 @@
     "copied": "已复制到剪贴板",
     "error": "远程访问设置修改失败",
     "connect": "连接",
-    "connectPrompt": "输入桌面应用中的访问令牌:设置 → 远程访问。",
-    "acpTitle": "外部编辑器（ACP）",
-    "acpHint": "从 Zed、JetBrains、Neovim 或任何支持 Agent Client Protocol 的编辑器驱动本工作区。把下面这段 agent 配置粘贴到编辑器设置里；它通过上面的网关连接，权限以令牌为准。",
-    "acpNodeHint": "编辑器会用 Node 18+ 启动这个脚本。令牌通过环境变量传入，不出现在命令行里。"
+    "connectPrompt": "输入桌面应用中的访问令牌:设置 → 远程访问。"
   },
   "memory": {
     "title": "记忆",

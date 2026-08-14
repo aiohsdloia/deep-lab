@@ -6,19 +6,7 @@ import { isGatewayWeb, gatewayGet } from "./webMode";
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-export interface OpenCodeCredentials {
-  provider: string;
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-}
-
-export type ConfigureResult =
-  | { ok: true; path: string }
-  | { ok: false; reason: "not-desktop" }
-  | { ok: false; reason: "error"; message: string };
-
-/** Start the bundled OpenCode sidecar (desktop only). Returns its base URL. */
+/** Start the bundled DeepSeek Harness sidecar (desktop only). Returns its base URL. */
 export async function startRuntime(): Promise<string | null> {
   if (!isTauri) return null;
   const { invoke } = await import("@tauri-apps/api/core");
@@ -26,9 +14,8 @@ export async function startRuntime(): Promise<string | null> {
 }
 
 /**
- * Per-run password the sidecar requires on every request (desktop only —
- * browser dev talks to a user-run, passwordless `opencode serve`). Held in
- * memory on both sides; never persisted.
+ * Per-run password the sidecar requires on every request (desktop only).
+ * Held in memory on both sides; never persisted.
  */
 export async function runtimePassword(): Promise<string | null> {
   if (!isTauri) return null;
@@ -94,23 +81,12 @@ export async function addPathsToWorkspace(paths: string[]): Promise<string[]> {
   return invoke<string[]>("add_paths_to_workspace", { paths });
 }
 
-/**
- * Explicitly import the user's OpenCode CLI login into the app's private
- * runtime (desktop only). Returns false when no CLI login exists; the sidecar
- * is restarted on success.
- */
-export async function importOpenCodeLogin(): Promise<boolean> {
-  if (!isTauri) return false;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<boolean>("import_opencode_login");
-}
-
 /** How agent actions get approved — the composer's Codex-style switch.
  *  "approve": dangerous shell commands (delete / install / remote / privilege)
  *  and web fetches prompt first. "full": everything in-workspace just runs. */
 export type ApprovalMode = "approve" | "full";
 
-/** The approval mode OpenCode's config currently holds ("approve" until changed). */
+/** The approval mode the runtime currently holds ("approve" until changed). */
 export async function getApprovalMode(): Promise<ApprovalMode> {
   if (!isTauri) return "approve";
   const { invoke } = await import("@tauri-apps/api/core");
@@ -269,14 +245,6 @@ export async function getGatewayStatus(): Promise<GatewayStatus | null> {
   return await invoke<GatewayStatus>("gateway_status");
 }
 
-/** Absolute path of the bundled ACP agent script an external editor spawns
- *  (#14, server direction), or null when it is not present. */
-export async function acpServerScript(): Promise<string | null> {
-  if (!isTauri) return null;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return await invoke<string | null>("acp_server_script");
-}
-
 /** Enable/disable + set binding and access mode; (re)binds the server. */
 export async function setGatewayConfig(
   enabled: boolean,
@@ -330,43 +298,7 @@ export async function providerAuthExists(providerID: string): Promise<boolean> {
   }
 }
 
-/** Per-session goal-mode state, as the bundled goal plugin records it.
- *  Passed through verbatim from goals.json — the plugin owns the schema. */
-export interface GoalState {
-  objective: string;
-  /** The plugin's status enum (its schema owns the literals). */
-  status: "active" | "paused" | "budgetLimited" | "usageLimited" | "complete" | "unmet" | string;
-  autoTurns?: number | null;
-  blocker?: string | null;
-  completionEvidence?: string | null;
-  lastStatus?: string | null;
-}
-
-/** The session's current goal (null when none / in browser dev). Reads the
- *  plugin's state file directly — a status pill must not cost a model turn. */
-export async function goalState(sessionId: string): Promise<GoalState | null> {
-  if (!isTauri) return null;
-  const { invoke } = await import("@tauri-apps/api/core");
-  try {
-    return await invoke<GoalState | null>("goal_state", { sessionId });
-  } catch {
-    return null;
-  }
-}
-
-/** Pause / resume / clear the session's goal from the UI (no model turn).
- *  Continuation only fires while status is "active", so pause stops the loop
- *  at the next idle. Returns the new state (null after clear). */
-export async function goalUpdate(
-  sessionId: string,
-  action: "pause" | "resume" | "clear",
-): Promise<GoalState | null> {
-  if (!isTauri) return null;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<GoalState | null>("goal_update", { sessionId, action });
-}
-
-/** Remove a provider/mcp entry from the global OpenCode config (restarts the sidecar). */
+/** Remove a provider/mcp entry from the runtime config (restarts the sidecar). */
 export async function removeConfigEntry(section: "provider" | "mcp", key: string): Promise<void> {
   if (!isTauri) throw new Error("not running in the desktop app");
   const { invoke } = await import("@tauri-apps/api/core");
@@ -646,7 +578,7 @@ export async function commitWorkspaceSnapshot(message: string): Promise<boolean>
 }
 
 /** Install a pasted SKILL.md into the app profile's user skills dir, where
- *  OpenCode finds it from every workspace, and restart the sidecar so it is
+ *  dsh finds it from every workspace, and restart the sidecar so it is
  *  discovered now. Returns the installed skill's name; throws when the text is
  *  not a SKILL.md (no frontmatter `name:`) or the name is already bundled. */
 export async function installSkillMarkdown(text: string): Promise<string> {
@@ -655,7 +587,7 @@ export async function installSkillMarkdown(text: string): Promise<string> {
   return invoke<string>("install_skill_markdown", { text });
 }
 
-/** Skill names already in the active workspace's `.opencode/skills/`. */
+/** Skill names already in the active workspace's `.dsh/skills/`. */
 export async function workspaceSkillNames(): Promise<string[]> {
   if (!isTauri) return [];
   const { invoke } = await import("@tauri-apps/api/core");
@@ -1143,23 +1075,4 @@ export async function watchFullscreen(cb: (fullscreen: boolean) => void): Promis
   };
   await sync();
   return win.onResized(() => void sync());
-}
-
-/** Write the provider key/model into OpenCode's config via the Rust command. */
-export async function configureOpenCode(
-  creds: OpenCodeCredentials,
-): Promise<ConfigureResult> {
-  if (!isTauri) return { ok: false, reason: "not-desktop" };
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const path = await invoke<string>("configure_opencode", {
-      provider: creds.provider,
-      apiKey: creds.apiKey,
-      model: creds.model,
-      baseUrl: creds.baseUrl ?? null,
-    });
-    return { ok: true, path };
-  } catch (e) {
-    return { ok: false, reason: "error", message: e instanceof Error ? e.message : String(e) };
-  }
 }

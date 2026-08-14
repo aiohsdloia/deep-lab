@@ -2,7 +2,7 @@
  * Comparing workspace paths across the app's two sources of truth.
  *
  * A project's `path` comes from Rust (`canonicalize()`), a session's `directory`
- * comes from the OpenCode sidecar, and on Windows the two never agree as strings
+ * comes from the dsh sidecar, and on Windows the two never agree as strings
  * even when they name the same folder: Rust yields `D:\Docs\projects\p` while the
  * sidecar reports `D:/Docs/projects/p`. Every exact-match lookup between them
  * therefore missed, so projects showed no sessions at all, project-scoped memory

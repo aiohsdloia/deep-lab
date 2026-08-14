@@ -4,7 +4,7 @@ import { pathKey, samePath } from "./workspacePath";
 
 describe("pathKey", () => {
   it("matches a Windows project path against the sidecar's session directory", () => {
-    // The exact pair from #76: Rust `canonicalize()` vs what OpenCode stored.
+    // The exact pair from #76: Rust `canonicalize()` vs what dsh stored.
     expect(pathKey(String.raw`D:\Openscience-documents\projects\视频总结`)).toBe(
       pathKey("D:/Openscience-documents/projects/视频总结"),
     );

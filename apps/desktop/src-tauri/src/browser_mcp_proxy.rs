@@ -1,6 +1,6 @@
 //! Ownership boundary for the bundled agent-browser MCP server.
 //!
-//! OpenCode supplies the current conversation identity through a trusted plugin.
+//! dsh supplies the current conversation identity through a trusted plugin.
 //! This proxy removes model-controlled lifecycle fields from the advertised
 //! schemas, blocks tools that can escape the current lease, and adds a private
 //! inventory view. The upstream MCP server still performs browser automation.

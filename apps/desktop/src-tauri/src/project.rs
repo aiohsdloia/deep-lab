@@ -148,7 +148,7 @@ fn info_of(meta: ProjectMeta, dir: &Path) -> ProjectInfo {
         description: meta.description,
         created_at: meta.created_at,
         // Native form, never the `\\?\` verbatim path `canonicalize()` returns on
-        // Windows: this string is matched against the `directory` OpenCode reports
+        // Windows: this string is matched against the `directory` dsh reports
         // for a session, and the verbatim prefix could never match (#76).
         path: crate::artifact_file::native_path(&canon),
         imported,

@@ -130,7 +130,7 @@ export const useSetupStore = create<SetupState>((set, get) => ({
       // Reconfiguration owns the whole browser lifecycle. Close any current
       // namespaced daemon before replacing the MCP process and its environment.
       await closeAgentBrowser();
-      // addMcpServer PATCHes the config, and OpenCode deep-merges the nested
+      // addMcpServer PATCHes the config, and dsh deep-merges the nested
       // `environment` map — so a reconfigure that DROPS a setting can't take
       // effect on a plain re-add: turning "Show the browser window" off (or
       // switching to the private browser, or clearing the domain allowlist)

@@ -1,4 +1,4 @@
-// Derives the id a custom endpoint gets in OpenCode's global config from the
+// Derives the id a custom endpoint gets in dsh's global config from the
 // display name the user typed. The id becomes a JSON key under `provider` and
 // rides inside "provider/model" strings, so it stays ASCII — but a display name
 // must not have to be (#89).

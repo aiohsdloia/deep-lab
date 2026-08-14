@@ -71,7 +71,7 @@ interface Row {
 const COLLAPSE_BELOW = 140;
 
 /** Whether `path` is the same folder as `base`, or sits inside it. Compared as
- *  path SEGMENTS, so "/w/OpenLab-old" is not treated as inside "/w/OpenLab".
+ *  path SEGMENTS, so "/w/DeepLab-old" is not treated as inside "/w/DeepLab".
  *  Both sides are normalized for separator and trailing slash only — this is a
  *  UI shortcut; the runtime canonicalizes and decides for real. */
 export function isInside(path: string, base: string): boolean {

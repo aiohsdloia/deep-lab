@@ -1,5 +1,5 @@
 // AI4S Workbench — Tauri 2 entry. Hosts the React frontend and supervises the
-// bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
+// bundled dsh sidecar (isolated config/data + dedicated port; killed on exit).
 mod artifact_file;
 mod browser;
 pub mod browser_mcp_proxy;
@@ -7,7 +7,6 @@ mod debug_log;
 mod examples;
 mod gateway;
 mod git_snapshot;
-mod goal;
 mod harness;
 mod compute;
 mod jupyter;
@@ -16,11 +15,10 @@ mod large_file;
 mod modal;
 mod model_probe;
 mod multimodal;
-mod opencode_config;
+mod dsh_config;
 mod preview_server;
 mod project;
 mod provenance;
-mod acp;
 mod runs;
 mod runs_index;
 mod runtime;
@@ -44,7 +42,7 @@ pub fn run() {
     tauri::Builder::default()
         // Single instance MUST be the first plugin. A second launch (or a reinstall
         // while the app is still running) focuses the existing window instead of
-        // starting a second OpenCode on the same data dir (which deadlocks the DB).
+        // starting a second dsh on the same data dir (which deadlocks the DB).
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
@@ -63,7 +61,6 @@ pub fn run() {
         .manage(runs::RunState::default())
         .manage(gateway::GatewayState::default())
         .manage(ssh_session::SshState::default())
-        .manage(acp::AcpState::default())
         .setup(|app| {
             // Watch the active workspace so changes made outside the app (an
             // external editor, a detached process) still enqueue a debounced
@@ -93,8 +90,6 @@ pub fn run() {
             runtime::start_runtime,
             runtime::runtime_password,
             gateway::gateway_status,
-            gateway::acp_server_script,
-            gateway::dsh_acp_launcher,
             gateway::set_gateway_config,
             gateway::regenerate_gateway_token,
             runtime::stop_runtime,
@@ -105,8 +100,6 @@ pub fn run() {
             runtime::set_workspace,
             runtime::mark_session,
             runtime::new_dated_workspace,
-            goal::goal_state,
-            goal::goal_update,
             project::create_project,
             project::import_project,
             project::list_projects,
@@ -120,14 +113,12 @@ pub fn run() {
             runtime::install_skill_markdown,
             runtime::workspace_skill_names,
             runtime::adopt_workspace_skills,
-            runtime::import_opencode_login,
             model_probe::probe_endpoint_models,
             runtime::provider_auth_exists,
             runtime::remove_config_entry,
             jupyter::jupyter_status,
             jupyter::setup_jupyter,
             jupyter::start_jupyter,
-            runtime::configure_opencode,
             runtime::get_approval_mode,
             runtime::set_approval_mode,
             runtime::read_memory,
@@ -197,10 +188,6 @@ pub fn run() {
             ssh_session::ssh_disconnect,
             ssh_session::ssh_sessions,
             ssh_session::ssh_sharing_supported,
-            acp::acp_start,
-            acp::acp_send,
-            acp::acp_stop,
-            acp::acp_running,
             modal::modal_status,
             preview_server::preview_url,
             large_file::probe_large_file,
@@ -212,7 +199,7 @@ pub fn run() {
         .run(|app, event| {
             // Clean up on exit. macOS Cmd+Q / Quit terminates via RunEvent::Exit
             // (ExitRequested is not always delivered), so handle BOTH — otherwise
-            // the OpenCode sidecar / kernel / Jupyter orphan on every quit. The
+            // the dsh sidecar / kernel / Jupyter orphan on every quit. The
             // cleanup is idempotent, so running on both is safe.
             if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
                 browser::close_agent_browser_on_exit();
@@ -223,8 +210,6 @@ pub fn run() {
                 // An authenticated ssh channel must not outlive the app that
                 // opened it (#73) — the master lives past our exit otherwise.
                 ssh_session::shutdown(app);
-                // An ACP agent child must not outlive the window that started it.
-                acp::shutdown(app);
             }
         });
 }

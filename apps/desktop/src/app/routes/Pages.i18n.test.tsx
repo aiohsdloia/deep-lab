@@ -103,7 +103,7 @@ describe("SkillsPage strings (i18n)", () => {
     renderAt("/skills");
     expect(await screen.findByText("build")).toBeInTheDocument();
     expect(screen.getByText("primary")).toBeInTheDocument();
-    // Unknown mode values (outside the closed set OpenCode emits) render raw, unmodified.
+    // Unknown mode values (outside the closed set dsh emits) render raw, unmodified.
     expect(screen.getByText("future-mode")).toBeInTheDocument();
   });
 });

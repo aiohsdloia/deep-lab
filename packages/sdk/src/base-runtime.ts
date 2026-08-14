@@ -1,14 +1,13 @@
 // BaseAgentRuntime: shared infrastructure for every AgentRuntime implementation.
 //
 // The listener/status machinery (getStatus / onEvent / onStatus / emit /
-// setStatus) is identical across runtimes — OpenCodeClient and CodexRuntime
-// had byte-for-byte copies. This base class factors it out so a new runtime
-// author fills in ONLY their protocol-specific methods (connect, createSession,
-// sendPrompt, ...) and inherits the plumbing.
+// setStatus) is identical across runtimes. This base class factors it out so a
+// runtime author fills in ONLY their protocol-specific methods (connect,
+// createSession, sendPrompt, ...) and inherits the plumbing.
 //
 // To add a new agent runtime, extend this class and implement the remaining
 // AgentRuntime methods. See docs/AGENT_INTEGRATION.md for a step-by-step guide.
-import type { OpenCodeEvent, RuntimeStatus } from "./types";
+import type { RuntimeEvent, RuntimeStatus } from "./types";
 
 /**
  * Listener + status plumbing shared by every runtime. A subclass extends this
@@ -21,7 +20,7 @@ import type { OpenCodeEvent, RuntimeStatus } from "./types";
  */
 export abstract class BaseAgentRuntime {
   private status: RuntimeStatus = "offline";
-  private readonly eventListeners = new Set<(e: OpenCodeEvent) => void>();
+  private readonly eventListeners = new Set<(e: RuntimeEvent) => void>();
   private readonly statusListeners = new Set<(s: RuntimeStatus) => void>();
 
   /** Current runtime status. Implements `AgentRuntime.getStatus`. */
@@ -30,7 +29,7 @@ export abstract class BaseAgentRuntime {
   }
 
   /** Subscribe to normalized runtime events. Returns an unsubscribe. */
-  onEvent(listener: (event: OpenCodeEvent) => void): () => void {
+  onEvent(listener: (event: RuntimeEvent) => void): () => void {
     this.eventListeners.add(listener);
     return () => this.eventListeners.delete(listener);
   }
@@ -44,7 +43,7 @@ export abstract class BaseAgentRuntime {
   // ---- tools for subclasses ----
 
   /** Fan a normalized event out to every onEvent listener. */
-  protected emit(event: OpenCodeEvent): void {
+  protected emit(event: RuntimeEvent): void {
     this.eventListeners.forEach((l) => l(event));
   }
 

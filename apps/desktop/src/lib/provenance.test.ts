@@ -24,15 +24,15 @@ describe("provenanceInputFromEvent", () => {
   });
 
   it("replaces path-only or empty titles with a compact tool → path log", () => {
-    // OpenCode write titles are usually just the file path — redundant.
-    const paths = provenanceInputFromEvent(write({ title: "Users/x/OpenLab/fig/plot.py" }));
+    // dsh write titles are usually just the file path — redundant.
+    const paths = provenanceInputFromEvent(write({ title: "Users/x/DeepLab/fig/plot.py" }));
     expect(paths?.log).toBe("write → fig/plot.py");
     const empty = provenanceInputFromEvent(write({ title: "" }));
     expect(empty?.log).toBe("write → fig/plot.py");
   });
 
   it("captures an edit's diff for lineage when full content isn't available", () => {
-    // OpenCode's edit tool carries oldString/newString (not `content`), so the
+    // dsh's edit tool carries oldString/newString (not `content`), so the
     // full file text isn't in the event — but its unified diff is.
     const edit = provenanceInputFromEvent(
       write({

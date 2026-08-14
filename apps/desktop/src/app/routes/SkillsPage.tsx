@@ -9,7 +9,7 @@ import { ClosePageButton } from "@/components/ui/ClosePageButton";
 
 /**
  * Skills, agents, install-a-skill, and detected scientific environment — all real:
- * skills/agents from the OpenCode runtime, environment from the host system.
+ * skills/agents from the dsh runtime, environment from the host system.
  */
 export function SkillsPage() {
   const { t } = useTranslation(["pages", "common"]);
@@ -55,7 +55,7 @@ export function SkillsPage() {
         <p className="mt-1 text-sm text-muted">
           {t("skills.description.prefix")}
           {/* eslint-disable-next-line i18next/no-literal-string -- literal filesystem path, not prose */}
-          <span className="font-mono">.opencode/skills/</span>
+          <span className="font-mono">.dsh/skills/</span>
           {t("skills.description.suffix")}
         </p>
 
@@ -146,24 +146,24 @@ export function SkillsPage() {
 
 type SkillSource = "builtin" | "project" | "user";
 
-/** Where a skill came from, read off the path OpenCode reports. Windows paths
+/** Where a skill came from, read off the path dsh reports. Windows paths
  *  arrive with backslashes, so match on a normalized copy. */
 function sourceOf(location?: string): SkillSource | undefined {
   if (!location) return undefined;
   const path = location.replace(/\\/g, "/");
-  // OpenCode's own built-in skill reports "<built-in>" (v1) or /builtin/… (v2).
+  // dsh's own built-in skill reports "<built-in>" or /builtin/… .
   if (path === "<built-in>" || path.includes("/builtin/")) return "builtin";
   // The app profile's skills dir: bundled packs, except the `user/` subtree the
   // skill installer writes to.
-  if (path.includes("/xdg-config/opencode/skills/")) {
-    return path.includes("/xdg-config/opencode/skills/user/") ? "user" : "builtin";
+  if (path.includes("/xdg-config/dsh/skills/")) {
+    return path.includes("/xdg-config/dsh/skills/user/") ? "user" : "builtin";
   }
-  if (path.includes("/.opencode/")) return "project";
+  if (path.includes("/.dsh/skills/")) return "project";
   // ~/.claude/skills, ~/.agents/skills, and config-declared skill paths.
   return "user";
 }
 
-// AgentInfo.mode is typed `string` (external SDK), but OpenCode only ever
+// AgentInfo.mode is typed `string` (external SDK), but dsh only ever
 // emits "primary" | "subagent" | "all" — see useRuntimeStore's a.mode ===
 // "primary" check. Narrow to the known set so we can translate it; unknown
 // values (future SDK additions) fall back to the raw string at the call site.
