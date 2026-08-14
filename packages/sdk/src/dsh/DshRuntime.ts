@@ -847,7 +847,16 @@ function foldHistory(events: SessionEvent[]): HistoryMessage[] {
   const messages: HistoryMessage[] = [];
   for (const event of events) {
     if (event.type === "user/message") {
-      const data = event.data as { id?: string; content?: ContentBlock[] };
+      const data = event.data as {
+        id?: string;
+        content?: ContentBlock[];
+        source?: { kind?: string };
+      };
+      // dsh also records SYSTEM-injected `user/message` rows (runtime context
+      // and the skill catalog, `source.kind` = "plugin" / "skill-catalog").
+      // Only genuine user input belongs in the conversation — otherwise every
+      // reopened session starts with a wall of context/skill boilerplate.
+      if (data.source?.kind && data.source.kind !== "user") continue;
       const text = (data.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("");
       messages.push({
         role: "user",

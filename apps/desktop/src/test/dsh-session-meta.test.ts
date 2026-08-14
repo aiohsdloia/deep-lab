@@ -80,3 +80,66 @@ describe("DshRuntime session list meta", () => {
     expect(all.sessions.find((s) => s.id === "a2")?.archived).toBeTypeOf("number");
   });
 });
+
+describe("DshRuntime history folding", () => {
+  function runtimeWith(handlers: Record<string, (payload: unknown) => unknown>) {
+    const fetchImpl = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      const method = (input as URL).pathname.split("/").pop() as string;
+      const value = handlers[method] ? handlers[method]!(body.payload) : {};
+      return new Response(
+        JSON.stringify({ type: "server-response", rpcId: body.rpcId ?? "0", result: { ok: true, value } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    return new DshRuntime({ baseUrl: "http://127.0.0.1:1", fetchImpl });
+  }
+
+  it("drops system-injected user/message rows from history", async () => {
+    const rt = runtimeWith({
+      "session.history": () => ({
+        events: [
+          {
+            event: {
+              type: "user/message",
+              data: {
+                id: "u1",
+                source: { kind: "user" },
+                content: [{ type: "text", text: "请写一个三子棋" }],
+              },
+            },
+          },
+          {
+            event: {
+              type: "user/message",
+              data: {
+                id: "u2",
+                source: { kind: "plugin" },
+                content: [{ type: "text", text: "Current runtime context…" }],
+              },
+            },
+          },
+          {
+            event: {
+              type: "user/message",
+              data: {
+                id: "u3",
+                source: { kind: "skill-catalog" },
+                content: [{ type: "text", text: "<system-reminder>…" }],
+              },
+            },
+          },
+          {
+            event: {
+              type: "assistant/message",
+              data: { message: { content: [{ type: "text", text: "好的" }] } },
+            },
+          },
+        ],
+      }),
+    });
+    const messages = await rt.getMessages("s1");
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(messages[0]?.parts).toEqual([{ type: "text", text: "请写一个三子棋" }]);
+  });
+});
