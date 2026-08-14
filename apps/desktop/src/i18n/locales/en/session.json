@@ -97,7 +97,9 @@
       "full": {
         "label": "Full access",
         "description": "Runs every command without asking"
-      }
+      },
+      "unlimitedLabel": "Unlimited mode",
+      "unlimitedDesc": "Full filesystem access for new sessions (danger-full-access)"
     },
     "error": {
       "paste": "Could not save paste: {{message}}",

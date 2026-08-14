@@ -373,6 +373,14 @@ interface RuntimeState {
   approvalMode: ApprovalMode;
   /** Persist a new approval mode (restarts the sidecar) and reconnect. */
   setApprovalMode: (mode: ApprovalMode) => Promise<void>;
+  /** "Unlimited mode" (仿 Open Lab): new sessions start in dsh's
+   *  danger-full-access preset — full filesystem access, no approval prompts.
+   *  Off = workspace-write. Persisted via dsh's own settings, applies to every
+   *  future session. */
+  unlimitedMode: boolean;
+  /** Switch unlimited mode (persists the dsh permission preset; no restart
+   *  needed — new sessions read it at create). */
+  setUnlimitedMode: (mode: boolean) => Promise<void>;
   /** Persist the network-proxy setting (restarts the sidecar) and reconnect. */
   setProxySetting: (mode: ProxyMode, url: string) => Promise<void>;
   tools: ToolStatus[];
@@ -673,6 +681,32 @@ let statusBlipTimer: ReturnType<typeof setTimeout> | null = null;
 function clearStatusBlip() {
   if (statusBlipTimer !== null) clearTimeout(statusBlipTimer);
   statusBlipTimer = null;
+}
+/** Auto-reconnect after the sidecar drops a live connection (network blip or
+ *  server restart). Debounced + bounded: an error can fire from both streams,
+ *  and we never want to fight the bootstrap retry loop. */
+let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let autoReconnectAttempts = 0;
+const AUTO_RECONNECT_MAX = 12;
+function autoReconnectAfterDisconnect(get: StoreGet) {
+  if (autoReconnectTimer !== null) return; // already scheduled
+  if (get().status !== "error") return;
+  if (autoReconnectAttempts >= AUTO_RECONNECT_MAX) return;
+  autoReconnectAttempts += 1;
+  const delay = autoReconnectAttempts === 1 ? 500 : 1500;
+  autoReconnectTimer = setTimeout(() => {
+    autoReconnectTimer = null;
+    if (get().status === "error") {
+      void get().connectRetry().then((ok) => {
+        if (ok) autoReconnectAttempts = 0;
+      });
+    }
+  }, delay);
+}
+function resetAutoReconnect() {
+  if (autoReconnectTimer !== null) clearTimeout(autoReconnectTimer);
+  autoReconnectTimer = null;
+  autoReconnectAttempts = 0;
 }
 /** Drop the current connection. */
 function teardownClient() {
@@ -1917,6 +1951,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
   modelSwitchError: null,
   approvalMode: "approve",
+  unlimitedMode: false,
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
@@ -2219,6 +2254,17 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
+  setUnlimitedMode: async (mode) => {
+    // No restart needed: the permission preset is read from dsh's settings at
+    // session create, so flipping it takes effect for every NEW session.
+    const client = getClient();
+    if (client && "setPermissionPreset" in client) {
+      await (client as { setPermissionPreset(p: "unlimited" | "restricted"): Promise<void> })
+        .setPermissionPreset(mode ? "unlimited" : "restricted");
+    }
+    set({ unlimitedMode: mode });
+  },
+
   setProxySetting: async (mode, url) => {
     // Same masked restart as setApprovalMode: the proxy env applies at spawn.
     set({ switching: true });
@@ -2364,6 +2410,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       clearStatusBlip();
       set({ status });
+      // The sidecar dropped the event streams mid-run (network blip, server
+      // restart) — recover automatically instead of leaving the UI dead. Only
+      // when we HAD a live connection; first-boot failures already run the
+      // bootstrap retry loop, so this must not double it.
+      if (status === "error") {
+        autoReconnectAfterDisconnect(get);
+      }
     });
     if (!sharedEventHandler)
       sharedEventHandler = (event) => {
@@ -2563,6 +2616,40 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               ),
             }));
           }
+          return;
+        }
+        case "session.added": {
+          // dsh's host stream reported a session created (by any client) — add
+          // it without a full re-list. Ignore archived and already-known ids.
+          set((s) => {
+            if (s.sessions.some((m) => m.id === event.sessionId)) return {};
+            return {
+              sessions: [
+                {
+                  id: event.sessionId,
+                  title: event.title || event.sessionId,
+                  directory: event.cwd,
+                  updated: event.updatedAt,
+                },
+                ...s.sessions,
+              ],
+            };
+          });
+          return;
+        }
+        case "session.removed": {
+          set((s) => ({ sessions: s.sessions.filter((m) => m.id !== event.sessionId) }));
+          return;
+        }
+        case "session.status": {
+          // running flip from the host stream — keep the sidebar live without
+          // a poll. (The thread lock is owned by the turn fold, not here.)
+          set((s) => {
+            const runningSessions = { ...s.runningSessions };
+            if (event.running) runningSessions[event.sessionId] = true;
+            else delete runningSessions[event.sessionId];
+            return { runningSessions };
+          });
           return;
         }
         case "message.agent": {
@@ -3011,6 +3098,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       await get().connect();
       if (get().status === "ready") {
         set({ modelSwitchError: null });
+        resetAutoReconnect();
         return true;
       }
       lastError = get().error ?? lastError;

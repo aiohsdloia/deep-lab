@@ -160,6 +160,8 @@ export function SessionView({
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
   const approvalMode = useRuntimeStore((s) => s.approvalMode);
   const setApprovalMode = useRuntimeStore((s) => s.setApprovalMode);
+  const unlimitedMode = useRuntimeStore((s) => s.unlimitedMode);
+  const setUnlimitedMode = useRuntimeStore((s) => s.setUnlimitedMode);
   const agents = useRuntimeStore((s) => s.agents);
   const sessionAgents = useRuntimeStore((s) => s.sessionAgents);
   const setAgentMode = useRuntimeStore((s) => s.setAgentMode);
@@ -982,6 +984,8 @@ export function SessionView({
               }
                approvalMode={approvalMode}
                onApprovalModeChange={(mode) => void setApprovalMode(mode)}
+               unlimitedMode={unlimitedMode}
+               onUnlimitedModeChange={(v) => void setUnlimitedMode(v)}
                agentMode={planAvailable ? agentMode : undefined}
                onAgentModeChange={planAvailable ? (mode) => setAgentMode(mode, key) : undefined}
                showModelPicker={connected && !webReadOnly}

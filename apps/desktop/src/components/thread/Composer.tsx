@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Hammer,
   Hand,
+  Infinity,
   ListChecks,
   MessageSquare,
   Paperclip,
@@ -139,6 +140,8 @@ export function Composer({
   placeholder,
   approvalMode,
   onApprovalModeChange,
+  unlimitedMode,
+  onUnlimitedModeChange,
   agentMode,
   onAgentModeChange,
   showModelPicker,
@@ -168,6 +171,10 @@ export function Composer({
    *  session does; static mock sessions don't). */
   approvalMode?: ApprovalMode;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
+  /** "Unlimited mode" (完整文件访问): new sessions start in dsh's
+   *  danger-full-access preset. Shown beside the approval switch. */
+  unlimitedMode?: boolean;
+  onUnlimitedModeChange?: (mode: boolean) => void;
   /** The Build/Plan agent switch — same both-or-nothing contract; the live
    *  session withholds it when the runtime has no "plan" agent. */
   agentMode?: AgentMode;
@@ -1076,6 +1083,33 @@ export function Composer({
                     )}
                   </button>
                 ))}
+                {/* Unlimited mode: full filesystem access for new sessions. */}
+                {onUnlimitedModeChange !== undefined && (
+                  <>
+                    <div className="mx-2 my-1 h-px bg-faint" />
+                    <button
+                      role="menuitemcheckbox"
+                      aria-checked={!!unlimitedMode}
+                      className="flex w-full items-start gap-2 rounded-input px-2 py-1.5 text-left hover:bg-surface-2"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setApprovalOpen(false);
+                        onUnlimitedModeChange(!unlimitedMode);
+                      }}
+                    >
+                      <Infinity size={13} className="mt-0.5 shrink-0 text-muted" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-text">
+                          {t("composer.approval.unlimitedLabel")}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          {t("composer.approval.unlimitedDesc")}
+                        </span>
+                      </span>
+                      {unlimitedMode && <Check size={13} className="mt-0.5 shrink-0 text-accent" />}
+                    </button>
+                  </>
+                )}
               </div>
             )}
             <button

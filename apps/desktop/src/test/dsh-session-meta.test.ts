@@ -143,3 +143,34 @@ describe("DshRuntime history folding", () => {
     expect(messages[0]?.parts).toEqual([{ type: "text", text: "请写一个三子棋" }]);
   });
 });
+
+describe("DshRuntime permission preset", () => {
+  function runtimeCapture() {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const fetchImpl = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      calls.push({ method: body.method, payload: body.payload });
+      return new Response(
+        JSON.stringify({ type: "server-response", rpcId: body.rpcId ?? "0", result: { ok: true, value: {} } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1", fetchImpl });
+    return { rt, calls };
+  }
+
+  it("maps unlimited/restricted to dsh permission presets", async () => {
+    const { rt, calls } = runtimeCapture();
+    await rt.setPermissionPreset("unlimited");
+    expect(calls[calls.length - 1]).toEqual({
+      method: "settings.update",
+      payload: { ns: "permission", patch: { defaultPreset: "danger-full-access" } },
+    });
+
+    await rt.setPermissionPreset("restricted");
+    expect(calls[calls.length - 1]).toEqual({
+      method: "settings.update",
+      payload: { ns: "permission", patch: { defaultPreset: "workspace-write" } },
+    });
+  });
+});

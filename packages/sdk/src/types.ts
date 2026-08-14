@@ -69,6 +69,26 @@ export interface SessionRenamedEvent {
   sessionId: string;
   title: string;
 }
+/** dsh's host stream reported a new session (from any client) — the app can add
+ *  it to the sidebar without a full re-list. */
+export interface SessionAddedEvent {
+  type: "session.added";
+  sessionId: string;
+  blank?: boolean;
+  title?: string;
+  cwd?: string;
+  updatedAt?: number;
+}
+/** dsh's host stream reported a session removed / a running-status flip. */
+export interface SessionRemovedEvent {
+  type: "session.removed";
+  sessionId: string;
+}
+export interface SessionStatusEvent {
+  type: "session.status";
+  sessionId: string;
+  running: boolean;
+}
 /** The turn's model call failed and the server is retrying it — dsh backs
  *  off exponentially with NO attempt cap, so without surfacing these the UI
  *  shows a bare "Working…" forever while every attempt fails. */
@@ -166,6 +186,9 @@ export type RuntimeEvent =
   | ToolUpdatedEvent
   | SessionIdleEvent
   | SessionRenamedEvent
+  | SessionAddedEvent
+  | SessionRemovedEvent
+  | SessionStatusEvent
   | MessageAgentEvent
   | SessionRetryEvent
   | RuntimeErrorEvent

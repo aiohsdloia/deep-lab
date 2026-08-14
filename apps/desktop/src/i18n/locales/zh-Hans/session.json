@@ -97,7 +97,9 @@
       "full": {
         "label": "完全访问",
         "description": "不询问即运行所有命令"
-      }
+      },
+      "unlimitedLabel": "无限模式",
+      "unlimitedDesc": "新会话获得完整文件系统访问权限（danger-full-access）"
     },
     "error": {
       "paste": "无法保存粘贴内容：{{message}}",

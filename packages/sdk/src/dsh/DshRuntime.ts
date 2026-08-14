@@ -159,16 +159,29 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
           resolve();
         });
         void (async () => {
-          for await (const envelope of stream) {
-            const frame = envelope.payload as { type: string; sessionId?: string; message?: string };
-            if (frame.type === "host/agent-error" && frame.sessionId && frame.message) {
-              this.emit({ type: "error", sessionId: frame.sessionId, message: frame.message });
+          try {
+            for await (const envelope of stream) {
+              const frame = envelope.payload as {
+                type: string;
+                sessionId?: string;
+                message?: string;
+                blank?: boolean;
+                title?: string;
+                cwd?: string;
+                updatedAt?: number;
+                running?: boolean;
+              };
+              this.foldHostFrame(frame);
+            }
+            // Stream ended (server closed) — the connection is gone.
+            if (!this.closed) this.setStatus("error");
+          } catch (err) {
+            if (!this.closed) {
+              if (!opened) reject(err);
+              else this.setStatus("error");
             }
           }
-        })().catch((err) => {
-          if (this.closed) return;
-          if (!opened) reject(err);
-        });
+        })();
       });
       const mux = new AbortController();
       this.aborts.add(mux);
@@ -209,8 +222,11 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
           this.foldMuxFrame(envelope.rpcId, frame);
         }
       }
+      // Stream ended (server closed) — the connection is gone.
+      if (!this.closed) this.setStatus("error");
     } catch (err) {
       if (!this.closed) {
+        this.setStatus("error");
         this.emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
       }
     }
@@ -268,6 +284,53 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         });
         break;
       }
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Fold one dsh host-stream frame into a normalized event. The host stream is
+   * the cross-client liveness/lifecycle channel: sessions created or removed by
+   * ANY client, running-status flips, and agent errors.
+   */
+  private foldHostFrame(frame: {
+    type: string;
+    sessionId?: string;
+    message?: string;
+    blank?: boolean;
+    title?: string;
+    cwd?: string;
+    updatedAt?: number;
+    running?: boolean;
+  }): void {
+    if (!frame.sessionId) return;
+    switch (frame.type) {
+      case "host/agent-error":
+        if (frame.message) {
+          this.emit({ type: "error", sessionId: frame.sessionId, message: frame.message });
+        }
+        break;
+      case "host/session-added":
+        this.emit({
+          type: "session.added",
+          sessionId: frame.sessionId,
+          blank: frame.blank,
+          title: frame.title,
+          cwd: frame.cwd,
+          updatedAt: frame.updatedAt,
+        });
+        break;
+      case "host/session-removed":
+        this.emit({ type: "session.removed", sessionId: frame.sessionId });
+        break;
+      case "host/session-status":
+        this.emit({
+          type: "session.status",
+          sessionId: frame.sessionId,
+          running: !!frame.running,
+        });
+        break;
       default:
         break;
     }
@@ -414,6 +477,37 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       await this.api.call("session.rename", { sessionId: result.sessionId, title }).catch(() => undefined);
     }
     return result.sessionId;
+  }
+
+  // ---- goals (dsh goal domain: auto-turn loop toward an objective) ----
+
+  /** The goal ref dsh returns from a create/mutation. */
+  private async goalRef(
+    method: "goal.create" | "goal.pause" | "goal.resume" | "goal.clear" | "goal.complete",
+    sessionId: string,
+    objective?: string,
+  ): Promise<void> {
+    const payload: Record<string, unknown> = { sessionId };
+    if (objective !== undefined) payload.objective = objective;
+    await this.api.call(method, payload);
+  }
+
+  /** Start a goal: the agent loops turns toward `objective` until done. */
+  async createGoal(sessionId: string, objective: string): Promise<void> {
+    await this.goalRef("goal.create", sessionId, objective);
+  }
+  /** Pause / resume / clear / complete a session's goal. */
+  async pauseGoal(sessionId: string): Promise<void> {
+    await this.goalRef("goal.pause", sessionId);
+  }
+  async resumeGoal(sessionId: string): Promise<void> {
+    await this.goalRef("goal.resume", sessionId);
+  }
+  async clearGoal(sessionId: string): Promise<void> {
+    await this.goalRef("goal.clear", sessionId);
+  }
+  async completeGoal(sessionId: string): Promise<void> {
+    await this.goalRef("goal.complete", sessionId);
   }
 
   async forkSession(sessionId: string, _beforeMessageId?: string): Promise<string> {
@@ -758,6 +852,21 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   /** The dsh DeepSeek provider reads its key from this credential ref. */
   private readonly apiKeyRef = "DEEPSEEK_API_KEY";
+
+  /**
+   * Switch the dsh permission preset that NEW sessions start from: "unlimited"
+   * = danger-full-access (full filesystem access, no approval prompts),
+   * "restricted" = workspace-write (write inside the workspace, wider asks
+   * approval). Persisted in dsh's own settings (permission.defaultPreset), so
+   * it survives restarts and applies to every future session.
+   */
+  async setPermissionPreset(preset: "unlimited" | "restricted"): Promise<void> {
+    const defaultPreset = preset === "unlimited" ? "danger-full-access" : "workspace-write";
+    await this.api.call("settings.update", {
+      ns: "permission",
+      patch: { defaultPreset },
+    });
+  }
 
   async setProviderApiKey(providerID: string, key: string): Promise<void> {
     // The dsh DeepSeek provider route (`deepseek-official`) resolves its bearer
