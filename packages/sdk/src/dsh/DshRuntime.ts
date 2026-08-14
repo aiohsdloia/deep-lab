@@ -93,6 +93,14 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   private readonly pendingQuestions = new Map<string, { sessionId: string; items: QuestionItem[] }>();
   /** rpcId of a pending approval/requested frame → its session + approvalId. */
   private readonly pendingApprovals = new Map<string, { sessionId: string; approvalId: string; tool: string }>();
+  /**
+   * Accumulated streamed text/reasoning per part key (sessionId:partId). dsh
+   * emits each `*-delta` chunk with only the INCREMENTAL text; the frontend
+   * folds `text.updated` / `reasoning.updated` as FULL-text idempotent updates,
+   * so the SDK must send the running total — not a delta — or every part
+   * collapses to its last one-or-two-character chunk.
+   */
+  private readonly streamText = new Map<string, string>();
 
   constructor(options: DshRuntimeOptions) {
     super();
@@ -251,22 +259,41 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         break;
       }
       case "assistant/chunk": {
-        const chunk = (event.data as { chunk?: { type: string; text?: string; index?: number; blockType?: string } })?.chunk;
+        const data = event.data as {
+          chunk?: { type: string; text?: string; index?: number; blockType?: string };
+          turn?: number;
+          step?: number;
+        };
+        const chunk = data?.chunk;
         if (!chunk) break;
         const index = chunk.index ?? 0;
+        // dsh streams each reasoning/text block as many tiny deltas with
+        // monotonically increasing `seq`. Key the folded part by the block's
+        // stable identity (turn · step · index) so every delta of one block
+        // accumulates into the SAME thread block, instead of opening a new
+        // one-word "思考" block per delta.
+        const turn = data?.turn ?? 0;
+        const step = data?.step ?? 1;
+        const partKey = `${turn}:${step}:${index}`;
         if (chunk.type === "text-delta" && typeof chunk.text === "string") {
+          const textKey = `${sessionId}:text:${partKey}`;
+          const accumulated = (this.streamText.get(textKey) ?? "") + chunk.text;
+          this.streamText.set(textKey, accumulated);
           this.emit({
             type: "text.updated",
             sessionId,
-            partId: `${event.seq}:text:${index}`,
-            text: chunk.text,
+            partId: `text:${partKey}`,
+            text: accumulated,
           });
         } else if (chunk.type === "reasoning-delta" && typeof chunk.text === "string") {
+          const textKey = `${sessionId}:reasoning:${partKey}`;
+          const accumulated = (this.streamText.get(textKey) ?? "") + chunk.text;
+          this.streamText.set(textKey, accumulated);
           this.emit({
             type: "reasoning.updated",
             sessionId,
-            partId: `${event.seq}:reasoning:${index}`,
-            text: chunk.text,
+            partId: `reasoning:${partKey}`,
+            text: accumulated,
           });
         }
         break;
