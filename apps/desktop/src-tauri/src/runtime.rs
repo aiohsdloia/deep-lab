@@ -1197,7 +1197,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     // Run dsh inside the user-facing workspace, NOT the app's cwd (which is `/`
     // when launched from Finder) — otherwise it scans the whole filesystem root.
     let workspace = workspace_dir(app)?;
-    for d in [&cfg, &data, &cache, &state, &dsh_home] {
+    for d in [&cfg, &data, &cache, &state, &dsh_home, &dsh_home.join("agents")] {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     // Ship the bundled scientific skills into the app-private dsh home's
@@ -1234,8 +1234,14 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     builder
         .arg(launcher)
         .args(["--profile", "web", "--host", "127.0.0.1", "--port", port_str.as_str()])
-        // App-private dirs: dsh never touches the user's ~/.dsh.
+        // App-private dirs: dsh never touches the user's ~/.dsh. DSH_AGENTS_HOME
+        // isolates the user-level `~/.agents/skills` pack — a legacy Open Lab
+        // install may carry Chinese-reviewed skills there that must not leak
+        // into DeepLab sessions — pointing dsh at the app's own (empty) agents
+        // dir instead, so only workspace `.dsh/skills` + the bundled packs
+        // contribute.
         .env("DSH_HOME", dsh_home.to_string_lossy().to_string())
+        .env("DSH_AGENTS_HOME", dsh_home.join("agents").to_string_lossy().to_string())
         .env("XDG_CONFIG_HOME", cfg.to_string_lossy().to_string())
         .env("XDG_DATA_HOME", data.to_string_lossy().to_string())
         .env("XDG_CACHE_HOME", cache.to_string_lossy().to_string())
