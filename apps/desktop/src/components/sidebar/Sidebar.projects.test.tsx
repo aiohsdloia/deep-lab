@@ -143,23 +143,4 @@ describe("Sidebar projects", () => {
     // Accent color token: pinned pins render in the accent color.
     expect(unpin.className).toContain("text-accent");
   });
-
-  it("hides the whole project block while an ACP agent is the runtime", async () => {
-    // Projects are an OpenCode concept — a persistent, folder-backed
-    // conversation store. An ACP agent owns its own ephemeral sessions, so
-    // offering "new project", "rename", "delete" on a structure the runtime
-    // does not use reads as broken controls that fail later. The block must
-    // vanish rather than render dead rows.
-    useRuntimeStore.setState({
-      projects: [PROJECT],
-      sessions: [],
-      runtimeKind: "acp",
-    });
-    renderAt("/files");
-
-    await screen.findByText("Sessions");
-    expect(screen.queryByText("BCI Trends")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New project" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Projects")).not.toBeInTheDocument();
-  });
 });

@@ -165,8 +165,8 @@
   },
   "live": {
     "runtime": {
-      "title": "OpenCode runtime",
-      "bodyPrefix": "The desktop app runs a bundled OpenCode automatically. In the browser, start one with",
+      "title": "DeepSeek Harness runtime",
+      "bodyPrefix": "The desktop app runs a bundled DeepSeek Harness automatically. In the browser, start one with",
       "bodySuffix": " and connect."
     },
     "connect": "Connect",

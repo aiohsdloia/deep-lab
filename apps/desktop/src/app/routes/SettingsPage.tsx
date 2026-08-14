@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Check,
-  ChevronRight,
   Download,
   ExternalLink,
   FolderOpen,
@@ -13,33 +11,24 @@ import {
 } from "lucide-react";
 import type {
   McpServer,
-  OAuthAuthorization,
-  ProviderAuthMethod,
-  ProviderCatalogEntry,
   ProviderInfo,
 } from "@deeplab/sdk";
-import { DSH_VERSION } from "@deeplab/sdk";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useUiStore, ZOOM_MAX, ZOOM_MIN } from "@/lib/store";
 import { shippedLocales } from "@/i18n/config";
-import { getClient, useRuntimeStore } from "@/lib/runtime";
-import {
+import { getClient, useRuntimeStore } from "@/lib/runtime";import {
   agentBrowserProfiles,
   closeAgentBrowser,
   detectChrome,
   setupBrowserChrome,
   type BrowserProfile,
   type ChromeInfo,
-  importOpenCodeLogin,
   isMacUA,
   isTauri,
   jupyterStatus,
-  openExternal,
-  logDebug,
   openWorkspaceBase,
   pickFolder,
-  providerAuthExists,
   pythonInterpreter,
   removeConfigEntry,
   setPythonPath,
@@ -47,27 +36,15 @@ import {
   workspaceBase,
   type JupyterStatus,
   type PythonInterpreter,
-  getProxySetting,
-  type ProxyMode,
-  type ProxySetting,
-  getMirrorSetting,
-  setMirrorSetting,
-  type MirrorSetting,
-  probeEndpointModels,
-  type ProbedModel,
 } from "@/lib/tauri";
 import { useSetupStore } from "@/lib/setup";
-import { customProviderId } from "@/lib/customProviderId";
 import { RemoteComputeCard } from "@/components/settings/RemoteComputeCard";
 import { RemoteAccessCard } from "@/components/settings/RemoteAccessCard";
-import { AcpAgentsCard } from "@/components/settings/AcpAgentsCard";
 import { ModalCard } from "@/components/settings/ModalCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
-import { ModelBrowser } from "@/components/settings/ModelBrowser";
 import { fallbackDefaultModel } from "@/components/settings/modelCatalog";
-import { ProviderManagerCard } from "@/components/settings/ProviderManagerCard";
-import { AgentModelsCard } from "@/components/settings/AgentModelsCard";
 import { VisionModelCard } from "@/components/settings/VisionModelCard";
+import { ModelSettingsCard } from "@/components/settings/ModelSettingsCard";
 import { MemoryCard } from "@/components/settings/MemoryCard";
 import { Row, Section, Switch } from "@/components/settings/Section";
 import { resolveSection } from "@/components/settings/sections";
@@ -102,14 +79,8 @@ export function SettingsPage() {
   // made the native <select>/<input>/<button> controls flicker and blank out on
   // scroll. These are the only fields the page actually reads.
   const status = useRuntimeStore((s) => s.status);
-  const switching = useRuntimeStore((s) => s.switching);
-  const serverUrl = useRuntimeStore((s) => s.serverUrl);
-  const setServerUrl = useRuntimeStore((s) => s.setServerUrl);
-  const connect = useRuntimeStore((s) => s.connect);
-  const disconnect = useRuntimeStore((s) => s.disconnect);
   const defaultModel = useRuntimeStore((s) => s.defaultModel);
   const loadCatalog = useRuntimeStore((s) => s.loadCatalog);
-  const runtimeKind = useRuntimeStore((s) => s.runtimeKind);
   const autoReview = useRuntimeStore((s) => s.autoReview);
   const setAutoReview = useRuntimeStore((s) => s.setAutoReview);
   const connected = status === "ready";
@@ -124,12 +95,6 @@ export function SettingsPage() {
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   // The Models card's own lifecycle. "ready" is sticky across later refresh
-  // failures (keep the last good list); a server-URL change resets it so a
-  // different runtime can never render the previous runtime's catalog.
-  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "unavailable">("loading");
-  const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
-  const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
-  const [customIds, setCustomIds] = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [jupyter, setJupyter] = useState<JupyterStatus | null>(null);
   // Browser control (agent-browser): detected Chrome + profiles, and the choices
@@ -153,45 +118,6 @@ export function SettingsPage() {
   const [mTarget, setMTarget] = useState("");
   const [wsPath, setWsPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // The store owns "a model switch failed" (modelSwitchError): after a failed
-  // apply the browser stays on screen for a retry instead of collapsing into
-  // the connect prompt, no matter how the attempt failed.
-  const modelSwitchError = useRuntimeStore((s) => s.modelSwitchError);
-  const modelSurfaceAvailable =
-    connected || switching || (status === "error" && modelSwitchError !== null);
-  const modelControlsBusy = busy || switching;
-
-  // Custom endpoint form (self-hosted / Ollama / OpenAI- or Anthropic-compatible).
-  const [showCustom, setShowCustom] = useState(false);
-  const [cName, setCName] = useState("");
-  const [cNpm, setCNpm] = useState("@ai-sdk/openai-compatible");
-  const [cUrl, setCUrl] = useState("");
-  const [cKey, setCKey] = useState("");
-  const [cModels, setCModels] = useState("");
-  // Optional context window for hand-typed model ids; probed models carry
-  // their own (cContexts). Empty → the SDK's 128k default.
-  const [cCtx, setCCtx] = useState("");
-  const [cDetected, setCDetected] = useState<ProbedModel[] | null>(null);
-  const [cDetecting, setCDetecting] = useState(false);
-  const [cContexts, setCContexts] = useState<Record<string, number>>({});
-
-  // Connect-a-provider flow state.
-  const [providerManagerOpen, setProviderManagerOpen] = useState(false);
-  const [connectQuery, setConnectQuery] = useState("");
-  const [keyInput, setKeyInput] = useState("");
-  const [bedrockRegion, setBedrockRegion] = useState("");
-  const [bedrockRegionLoading, setBedrockRegionLoading] = useState(false);
-  const [promptInputs, setPromptInputs] = useState<Record<string, string>>({});
-  const [oauth, setOauth] = useState<
-    (OAuthAuthorization & { providerID: string; methodIndex: number }) | null
-  >(null);
-  const [codeInput, setCodeInput] = useState("");
-  // A pending browser-login wait: `oauthGen` invalidates it (cancel, restart,
-  // or connecting some other way), `oauthAbort` also cancels its in-flight
-  // callback request so retries never stack pending waits on the sidecar.
-  const oauthGen = useRef(0);
-  const oauthAbort = useRef<AbortController | null>(null);
-
   const refresh = useCallback(async (): Promise<ProviderInfo[] | null> => {
     const client = getClient();
     if (!client) return null;
@@ -202,20 +128,11 @@ export function SettingsPage() {
     try {
       fresh = await client.listProviders();
       setProviders(fresh);
-      setCatalogState("ready");
     } catch {
-      setCatalogState((s) => (s === "ready" ? s : "unavailable"));
+      /* catalog is advisory; the page still renders */
     }
     try {
-      const [m, c, custom, mcp] = await Promise.all([
-        client.listAuthMethods(),
-        client.listProviderCatalog(),
-        client.listCustomProviderIds(),
-        client.listMcpServers().catch(() => []),
-      ]);
-      setAuthMethods(m);
-      setCatalog(c.all);
-      setCustomIds(custom);
+      const mcp = await client.listMcpServers().catch(() => []);
       setMcpServers(mcp);
       setJupyter(await jupyterStatus());
     } catch {
@@ -230,12 +147,6 @@ export function SettingsPage() {
   useEffect(() => {
     if (connected) void refresh();
   }, [connected, refresh, setupGeneration]);
-  // A different server URL means a different runtime: drop the cached catalog
-  // so its models can never be shown against (or written to) the new server.
-  useEffect(() => {
-    setProviders([]);
-    setCatalogState("loading");
-  }, [serverUrl]);
   useEffect(() => {
     // The BASE folder — contains projects/ and sessions/. (The per-session
     // active folder shows in the conversation header.)
@@ -311,60 +222,6 @@ export function SettingsPage() {
     }
   };
 
-  // Network proxy for the sidecar (follow system / custom / direct).
-  const [proxy, setProxy] = useState<ProxySetting | null>(null);
-  const [proxyUrlInput, setProxyUrlInput] = useState("");
-  const refreshProxy = useCallback(() => {
-    void getProxySetting().then((p) => {
-      setProxy(p);
-      if (p) setProxyUrlInput(p.url);
-    });
-  }, []);
-  useEffect(refreshProxy, [refreshProxy]);
-
-  const applyProxy = (mode: ProxyMode, url: string) =>
-    run(t("toast.couldNotSetProxy"), async () => {
-      await useRuntimeStore.getState().setProxySetting(mode, url);
-      refreshProxy();
-      toast.success(t("toast.proxyApplied"));
-    });
-
-  /** Mode select: system/none apply immediately; custom just reveals the URL
-   *  field — it applies on Save/Enter once a URL is typed. */
-  const changeProxyMode = (mode: ProxyMode) => {
-    if (!proxy) return;
-    if (mode === "custom") {
-      setProxy({ ...proxy, mode: "custom" });
-      return;
-    }
-    void applyProxy(mode, "");
-  };
-  const validProxyUrl = /^(https?|socks5):\/\/\S+:\d+\/?$/i.test(proxyUrlInput.trim());
-
-  // uv download mirrors, used only when provisioning Python tools (Jupyter,
-  // science databases). Optional; a blank field clears that mirror.
-  const [mirror, setMirror] = useState<MirrorSetting | null>(null);
-  const [pypiInput, setPypiInput] = useState("");
-  const [pythonInput, setPythonInput] = useState("");
-  useEffect(() => {
-    void getMirrorSetting().then((m) => {
-      setMirror(m);
-      if (m) {
-        setPypiInput(m.pypi);
-        setPythonInput(m.python);
-      }
-    });
-  }, []);
-  const validMirror = (u: string) => u.trim() === "" || /^https?:\/\/\S+$/i.test(u.trim());
-  const mirrorDirty =
-    !!mirror && (pypiInput.trim() !== mirror.pypi || pythonInput.trim() !== mirror.python);
-  const applyMirror = () =>
-    run(t("toast.couldNotSetMirror"), async () => {
-      await setMirrorSetting(pypiInput.trim(), pythonInput.trim());
-      setMirror({ pypi: pypiInput.trim(), python: pythonInput.trim() });
-      toast.success(t("toast.mirrorSaved"));
-    });
-
   // The one post-change sequence — run() and the background OAuth wait must
   // stay in lockstep, so they share it instead of each keeping a copy.
   const refreshAll = async () => {
@@ -396,276 +253,6 @@ export function SettingsPage() {
       setBusy(false);
     }
   };
-
-  // Any action that cancels, restarts or bypasses the oauth flow must call
-  // this: it invalidates the pending browser wait and aborts its request.
-  const invalidateOauthWait = () => {
-    oauthGen.current++;
-    oauthAbort.current?.abort();
-    oauthAbort.current = null;
-  };
-
-  const saveModel = async (model: string): Promise<boolean> => {
-    // The store masks the whole apply with `switching` and records any failure
-    // in `modelSwitchError`; this page only presents the outcome.
-    try {
-      await useRuntimeStore.getState().setDefaultModel(model);
-      toast.success(t("toast.defaultModelSet", { model }));
-      return true;
-    } catch (error) {
-      toast.error(`${t("toast.couldNotSetModel")}: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    }
-  };
-
-  const saveKey = (providerID: string) =>
-    run(t("toast.couldNotSaveKey"), async () => {
-      if (providerID === "amazon-bedrock") {
-        await getClient()!.setProviderRegion(providerID, bedrockRegion.trim());
-      }
-      await getClient()!.setProviderApiKey(providerID, keyInput.trim());
-      cancelOAuth(); // a pending browser login for this panel is now moot
-      setKeyInput("");
-      setConnectQuery("");
-      toast.success(t("toast.providerConnected", { providerID }));
-    });
-
-  const startOAuth = (providerID: string, methodIndex: number, inputs?: Record<string, string>) =>
-    run(t("toast.couldNotStartLogin"), async () => {
-      // Re-clicking while THIS login is already waiting must not re-authorize:
-      // a second authorize supersedes the pending one server-side, and some
-      // provider plugins (xai) then tear down the loopback callback server the
-      // new attempt just handed to the browser — every retry would fail. The
-      // existing wait keeps covering the flow; let it finish.
-      if (
-        oauth &&
-        oauth.providerID === providerID &&
-        oauth.methodIndex === methodIndex &&
-        oauthAbort.current
-      )
-        return;
-      invalidateOauthWait(); // this flow replaces any pending one
-      const gen = oauthGen.current;
-      const auth = await getClient()!.oauthAuthorize(providerID, methodIndex, inputs);
-      if (gen !== oauthGen.current) return; // cancelled while starting
-      setOauth({ ...auth, providerID, methodIndex });
-      await openExternal(auth.url);
-      // "auto" flows finish on the browser redirect — the callback call below
-      // WAITS for it, so run it in the background (never through `busy`, which
-      // would lock the whole page for as long as the browser tab stays open).
-      if (auth.method !== "code" && gen === oauthGen.current)
-        void waitForBrowserLogin(providerID, methodIndex, gen);
-    });
-
-  // Provider plugins hold a browser login open for minutes (xai: 5). Match
-  // that window when re-attaching a dropped callback wait below.
-  const OAUTH_WAIT_MS = 5 * 60 * 1000;
-
-  const waitForBrowserLogin = async (providerID: string, methodIndex: number, gen: number) => {
-    const deadline = Date.now() + OAUTH_WAIT_MS;
-    const active = () => gen === oauthGen.current;
-    // Ground truth that the login landed: the sidecar writes the provider's
-    // token to its credential store the moment the browser flow completes —
-    // even when the callback wait below never hears about it (loopback port
-    // collision, proxy, dropped redirect). The browser then shows "success"
-    // while the app looks frozen (#17). Only conclusive for a provider that
-    // had no credentials when the wait began.
-    const hadAuth = await providerAuthExists(providerID);
-    const loginLanded = async () => !hadAuth && (await providerAuthExists(providerID));
-
-    // The callback POST hangs open until the browser redirect lands, but the
-    // webview's native fetch enforces its own idle timeout (~60s in WKWebView)
-    // — far shorter than the provider's login window, and a slow browser login
-    // (2FA, consent) used to surface as "login did not complete" even though
-    // the browser then finished successfully. A network-level drop is NOT a
-    // failed login: the server keeps the pending attempt and a re-POST resumes
-    // waiting on it (opencode's ProviderAuth.callback re-invokes the stored
-    // pending closure; it is never consumed). Retry those; HTTP errors are the
-    // provider's real verdict and stay terminal.
-    type Verdict = { ok: boolean; viaStore: boolean; error?: unknown };
-    const callbackVerdict = async (): Promise<Verdict | null> => {
-      let lastError: unknown = new Error("Timed out waiting for the browser login");
-      while (Date.now() < deadline && active()) {
-        const abort = new AbortController();
-        oauthAbort.current = abort;
-        try {
-          await getClient()!.oauthCallback(providerID, methodIndex, undefined, abort.signal);
-          if (!active()) {
-            // Cancelled in the UI, but the login DID complete — refresh silently
-            // so the now-connected provider still shows up in the list.
-            await refreshAll();
-            return null;
-          }
-          return { ok: true, viaStore: false };
-        } catch (e) {
-          if (!active()) return null; // cancelled — the abort is expected
-          // Webview fetch failures (idle timeout, transient drop) are TypeError;
-          // apiError() throws plain Error for the server's HTTP verdicts.
-          if (e instanceof TypeError) {
-            lastError = e;
-            await new Promise((r) => setTimeout(r, 500));
-            continue;
-          }
-          return { ok: false, viaStore: false, error: e };
-        } finally {
-          if (oauthAbort.current === abort) oauthAbort.current = null;
-        }
-      }
-      // The login window closed without a verdict from the server.
-      return active() ? { ok: false, viaStore: false, error: lastError } : null;
-    };
-
-    // Race the server's verdict against the credential store: whichever
-    // reports first settles the wait. The watcher only ever reports success —
-    // silence just leaves the callback in charge.
-    let verdict = await new Promise<Verdict | null>((resolve) => {
-      void callbackVerdict().then(resolve);
-      void (async () => {
-        while (Date.now() < deadline && active()) {
-          await new Promise((r) => setTimeout(r, 2000));
-          if (!active()) return;
-          if (await loginLanded()) return resolve({ ok: true, viaStore: true });
-        }
-      })();
-    });
-    if (verdict === null || !active()) return; // cancelled
-    if (!verdict.ok && (await loginLanded())) {
-      // The server said failure (or timed out), but the credential store says
-      // the login landed — the callback signal was lost, not the login.
-      verdict = { ok: true, viaStore: true };
-    }
-    if (!active()) return; // superseded while re-checking the store
-    invalidateOauthWait(); // settled either way — stop the losing strategy
-    setOauth(null);
-    if (!verdict.ok) {
-      const err = verdict.error;
-      toast.error(`${t("toast.loginDidNotComplete")}: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
-    // A store-confirmed login skipped oauthCallback's cache invalidation — the
-    // provider list would still answer from the pre-login cache.
-    if (verdict.viaStore) await getClient()?.refreshProviderCache();
-    toast.success(t("toast.providerConnected", { providerID }));
-    await refreshAll();
-  };
-
-  const cancelOAuth = () => {
-    invalidateOauthWait();
-    setOauth(null);
-    setCodeInput("");
-  };
-
-  const completeOAuth = () =>
-    run(t("toast.loginDidNotComplete"), async () => {
-      if (!oauth) return;
-      const { providerID, methodIndex } = oauth;
-      invalidateOauthWait(); // the pasted code supersedes any browser wait
-      await getClient()!.oauthCallback(providerID, methodIndex, codeInput.trim() || undefined);
-      toast.success(t("toast.providerConnected", { providerID }));
-      setOauth(null);
-      setCodeInput("");
-    });
-
-  const disconnectProvider = (providerID: string) =>
-    run(t("toast.couldNotRemove"), async () => {
-      const custom = customIds.includes(providerID);
-      // #37 diagnostics: record removals so a repro (e.g. "removing one provider
-      // makes every key stop being recognized") shows the provider set before and
-      // after, distinguishing a config vs. auth-store mismatch.
-      void logDebug(`[provider] disconnect ${providerID} (custom=${custom})`);
-      if (custom) {
-        // Custom endpoints live in the config file; removal restarts the sidecar.
-        await removeConfigEntry("provider", providerID);
-        await useRuntimeStore.getState().connectRetry();
-        // A custom provider's id is derived from its display name, and a key set
-        // via the key panel is stored separately in the auth store keyed by that
-        // id. Removing only the config entry leaves that credential behind, so
-        // re-adding the endpoint appears to "only work when the name matches
-        // exactly" — the stale key silently re-attaches (#37). Clear it too.
-        // Best-effort: most custom providers carry their key inline (no auth
-        // entry), and DELETE on a missing one is expected to fail.
-        await getClient()!.removeProviderAuth(providerID).catch(() => undefined);
-      } else {
-        await getClient()!.removeProviderAuth(providerID);
-      }
-      try {
-        const provs = await getClient()!.listProviders();
-        void logDebug(`[provider] after removing ${providerID}: providers=[${provs.map((p) => p.id).join(",")}]`);
-      } catch (e) {
-        void logDebug(`[provider] post-remove probe failed: ${e instanceof Error ? e.message : String(e)}`);
-      }
-      toast.success(t("toast.providerRemoved", { providerID }));
-    });
-
-  // Ask the endpoint itself which models it serves (and their context windows
-  // where reported — Ollama native, vLLM, OpenRouter). Results render as
-  // toggleable chips; contexts ride along into saveCustom.
-  const fetchCustomModels = async () => {
-    if (!cUrl.trim()) {
-      toast.error(t("toast.endpointFieldsRequired"));
-      return;
-    }
-    setCDetecting(true);
-    try {
-      const found = await probeEndpointModels(
-        cUrl.trim(),
-        cKey.trim() || undefined,
-        cNpm === "@ai-sdk/anthropic" ? "anthropic" : "openai",
-      );
-      setCDetected(found);
-      setCContexts((prev) => {
-        const next = { ...prev };
-        for (const m of found) if (m.context) next[m.id] = m.context;
-        return next;
-      });
-    } catch (err) {
-      toast.error(`${t("toast.couldNotFetchModels")}: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setCDetecting(false);
-    }
-  };
-
-  const modelList = (s: string) => s.split(",").map((v) => v.trim()).filter(Boolean);
-
-  const toggleDetectedModel = (id: string) => {
-    const models = modelList(cModels);
-    const next = models.includes(id) ? models.filter((m) => m !== id) : [...models, id];
-    setCModels(next.join(", "));
-  };
-
-  const saveCustom = () =>
-    run(t("toast.couldNotAddEndpoint"), async () => {
-      const id = customProviderId(cName);
-      const models = modelList(cModels);
-      if (!id || !cUrl.trim() || models.length === 0) {
-        toast.error(t("toast.endpointFieldsRequired"));
-        return;
-      }
-      // Per-model context: probed value first, else the optional typed one.
-      const typedCtx = Number.parseInt(cCtx.trim(), 10);
-      const contexts: Record<string, number> = {};
-      for (const m of models) {
-        const ctx = cContexts[m] ?? (Number.isFinite(typedCtx) && typedCtx > 0 ? typedCtx : 0);
-        if (ctx > 0) contexts[m] = ctx;
-      }
-      await getClient()!.addCustomProvider(id, {
-        name: cName.trim(),
-        npm: cNpm,
-        baseURL: cUrl.trim(),
-        apiKey: cKey.trim() || undefined,
-        models,
-        contexts,
-      });
-      toast.success(t("toast.endpointAdded", { name: cName.trim() }));
-      setShowCustom(false);
-      setCName("");
-      setCUrl("");
-      setCKey("");
-      setCModels("");
-      setCCtx("");
-      setCDetected(null);
-      setCContexts({});
-    });
 
   const addMcp = () =>
     run(t("toast.couldNotAddMcp"), async () => {
@@ -733,57 +320,6 @@ export function SettingsPage() {
       toast.success(t("toast.mcpRemoved", { name }));
     });
 
-  const importLogin = () =>
-    run(t("toast.importFailed"), async () => {
-      const found = await importOpenCodeLogin();
-      if (!found) {
-        toast.error(t("toast.noOpenCodeLoginFound"));
-        return;
-      }
-      // The sidecar restarted with the imported credentials — reconnect.
-      await useRuntimeStore.getState().connectRetry();
-      toast.success(t("toast.importedLogin"));
-    });
-
-  // Resolve the search box to a catalog entry (by id or exact name).
-  const q = connectQuery.trim().toLowerCase();
-  const selected =
-    catalog.find((p) => p.id === q) ?? catalog.find((p) => p.name.toLowerCase() === q) ?? null;
-  const validBedrockRegion =
-    selected?.id !== "amazon-bedrock" ||
-    /^[a-z]{2}(?:-gov)?-[a-z]+-\d+$/.test(bedrockRegion.trim());
-  useEffect(() => {
-    if (selected?.id !== "amazon-bedrock") return;
-    const client = getClient();
-    if (!client) return;
-    let active = true;
-    setBedrockRegionLoading(true);
-    void client
-      .getProviderRegion(selected.id)
-      .then((region) => {
-        if (active) setBedrockRegion(region ?? "");
-      })
-      .catch(() => {
-        if (active) setBedrockRegion("");
-      })
-      .finally(() => {
-        if (active) setBedrockRegionLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selected?.id]);
-  // Every provider takes an API key via PUT /auth; special flows (OAuth) add to
-  // that. Keep each method's index in the provider's FULL upstream list — the
-  // authorize call is by that index, and filtering re-numbers positions (a
-  // provider whose api method precedes an oauth one would authorize the wrong
-  // method).
-  const oauthMethods: Array<{ method: ProviderAuthMethod; index: number }> = selected
-    ? (authMethods[selected.id] ?? [])
-        .map((method, index) => ({ method, index }))
-        .filter(({ method }) => method.type === "oauth")
-    : [];
-
   return (
     // `select-none`: Settings is chrome, not a document. Right-clicking or
     // dragging across a label used to leave stray highlight behind; the inputs
@@ -793,490 +329,14 @@ export function SettingsPage() {
       <div className="mx-auto max-w-2xl px-4 pb-16 pt-4 sm:px-8">
         <h1 className="text-2xl text-text">{t(`nav.${section}`)}</h1>
 
-        {/* ---- Agent runtime (server + proxy + mirrors, one grouped card) ---- */}
-        {section === "runtime" && (
-        <Section title={t("runtime.title")} hint={t("runtime.hint")} flush>
-          <div className="divide-y divide-faint">
-            {/* Server URL + connection status */}
-            <Row
-              title={t("runtime.serverLabel")}
-              hint={
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full",
-                      connected ? "bg-ok" : status === "error" ? "bg-error" : "bg-muted",
-                    )}
-                  />
-                  <span className="capitalize">{status}</span>
-                  {connected && defaultModel && (
-                    <>
-                      <span className="text-border">·</span>
-                      <span className="font-mono">{defaultModel}</span>
-                    </>
-                  )}
-                  {/* The bundled agent runtime, so a user with their own OpenCode
-                      install can tell the two apart (#74). Shown on the desktop
-                      only: the web client talks to whatever the host bundles. */}
-                  {isTauri && (
-                    <>
-                      <span className="text-border">·</span>
-                      <span className="font-mono">{`DeepSeek Harness ${DSH_VERSION}`}</span>
-                    </>
-                  )}
-                </span>
-              }
-            >
-              <div className="mt-2.5 flex items-center gap-2">
-                <input
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder={t("runtime.serverUrlPlaceholder")}
-                  className={inputCls("flex-1 font-mono")}
-                />
-                {connected ? (
-                  <button onClick={disconnect} className={btnGhost()}>
-                    {t("runtime.disconnect")}
-                  </button>
-                ) : (
-                  <button onClick={connect} className={btnAccent()}>
-                    {t("runtime.connect")}
-                  </button>
-                )}
-              </div>
-            </Row>
-
-            {/* Network proxy: follow system / custom / direct. Mode is a right-side
-                chip; a custom URL field appears below only when "custom" is picked. */}
-            {isTauri && proxy && (
-              <Row
-                title={t("runtime.proxyLabel")}
-                hint={
-                  proxy.mode === "none"
-                    ? t("runtime.proxyDirectHint")
-                    : proxy.effective
-                      ? t("runtime.proxyEffective", { url: proxy.effective })
-                      : t("runtime.proxyNoneDetected")
-                }
-                control={
-                  <select
-                    value={proxy.mode}
-                    onChange={(e) => changeProxyMode(e.target.value as ProxyMode)}
-                    disabled={busy}
-                    aria-label={t("runtime.proxyLabel")}
-                    className={chipCls("shrink-0")}
-                  >
-                    <option value="system">{t("runtime.proxySystem")}</option>
-                    <option value="custom">{t("runtime.proxyCustom")}</option>
-                    <option value="none">{t("runtime.proxyNone")}</option>
-                  </select>
-                }
-              >
-                {proxy.mode === "custom" && (
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <input
-                      value={proxyUrlInput}
-                      onChange={(e) => setProxyUrlInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && validProxyUrl) void applyProxy("custom", proxyUrlInput.trim());
-                      }}
-                      placeholder={t("runtime.proxyPlaceholder")}
-                      className={inputCls("flex-1 font-mono")}
-                    />
-                    <button
-                      className={btnAccent()}
-                      onClick={() => void applyProxy("custom", proxyUrlInput.trim())}
-                      disabled={busy || !validProxyUrl}
-                    >
-                      <Check size={13} /> {t("common:actions.save")}
-                    </button>
-                  </div>
-                )}
-              </Row>
-            )}
-
-            {/* uv download mirrors — always visible; optional, applies on Save. */}
-            {isTauri && mirror && (
-              <Row title={t("runtime.mirrorTitle")} hint={t("runtime.mirrorHint")}>
-                <div className="mt-2.5 space-y-2.5">
-                  <label className="block">
-                    <span className="mb-1 block text-xs text-muted">{t("runtime.mirrorPypi")}</span>
-                    <input
-                      value={pypiInput}
-                      onChange={(e) => setPypiInput(e.target.value)}
-                      placeholder={t("runtime.mirrorPypiPlaceholder")}
-                      className={inputCls("w-full font-mono")}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs text-muted">{t("runtime.mirrorPython")}</span>
-                    <input
-                      value={pythonInput}
-                      onChange={(e) => setPythonInput(e.target.value)}
-                      placeholder={t("runtime.mirrorPythonPlaceholder")}
-                      className={inputCls("w-full font-mono")}
-                    />
-                  </label>
-                  <div className="flex justify-end">
-                    <button
-                      className={btnAccent()}
-                      onClick={() => void applyMirror()}
-                      disabled={busy || !mirrorDirty || !validMirror(pypiInput) || !validMirror(pythonInput)}
-                    >
-                      <Check size={13} /> {t("common:actions.save")}
-                    </button>
-                  </div>
-                </div>
-              </Row>
-            )}
-          </div>
-        </Section>
-        )}
-
-        {/* ---- Models ---- */}
-        {section === "models" && (
-        <Section title={t("model.title")} hint={t("model.hint")}>
-          {!modelSurfaceAvailable ? (
-            <p className="text-[13px] text-muted">{t("model.connectPrompt")}</p>
-          ) : catalogState === "unavailable" ? (
-            <p className="text-[13px] text-muted">{t("model.catalogUnavailable")}</p>
-          ) : catalogState === "loading" ? (
-            <p className="text-[13px] text-muted">{t("model.catalogLoading")}</p>
-          ) : (
-            <ModelBrowser
-              providers={providers}
-              defaultModel={defaultModel}
-              busy={modelControlsBusy}
-              onSelect={saveModel}
-              onManageProviders={() => setProviderManagerOpen(true)}
-            />
-          )}
-        </Section>
-        )}
-
-        {/* ---- One model per agent (a fast reviewer, a strong main agent) ---- */}
-        {section === "models" && isTauri && <AgentModelsCard providers={providers} />}
+        {/* ---- Models: one API key + Flash/Pro choice ---- */}
+        {section === "models" && <ModelSettingsCard />}
 
         {/* ---- Image-understanding model: image turns route here ---- */}
         {section === "models" && <VisionModelCard providers={providers} />}
 
         {/* ---- Persistent memory layers ---- */}
         {section === "memory" && <MemoryCard />}
-
-        {/* ---- Providers ---- */}
-        {section === "models" && (
-        <ProviderManagerCard
-          providers={providers}
-          expanded={providerManagerOpen}
-          onExpandedChange={setProviderManagerOpen}
-        >
-          {!connected ? (
-            <p className="px-4 py-3 text-[13px] text-muted">{t("providers.connectPrompt")}</p>
-          ) : (
-            <>
-              <div>
-                {providers.map((p, i) => (
-                  <div
-                    key={p.id}
-                    className={cn(
-                      "flex h-10 items-center gap-2.5 bg-surface px-3 text-[13px]",
-                      i > 0 && "border-t border-faint",
-                    )}
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok" />
-                    <span className="font-medium text-text">{p.name}</span>
-                    <span className="text-xs text-muted">
-                      {t("providers.modelCount", { count: p.models.length })}
-                    </span>
-                    <div className="flex-1" />
-                    {p.id === "opencode" ? (
-                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted ring-1 ring-border">
-                        {t("providers.builtInFree")}
-                      </span>
-                    ) : (
-                      <button
-                        className="text-xs text-muted transition-colors hover:text-error"
-                        onClick={() => void disconnectProvider(p.id)}
-                        disabled={busy}
-                        title={t("providers.removeTitle")}
-                      >
-                        {t("common:actions.remove")}
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                {/* Connect a provider */}
-                <div className="border-t border-faint p-3">
-                  <div className="relative">
-                    <Search
-                      size={13}
-                      className="pointer-events-none absolute left-3 top-1/2 -mt-[6.5px] text-muted"
-                    />
-                    <input
-                      list="provider-catalog"
-                      value={connectQuery}
-                      onChange={(e) => {
-                        setConnectQuery(e.target.value);
-                        cancelOAuth();
-                        setPromptInputs({});
-                      }}
-                      placeholder={t("providers.searchPlaceholder", { count: catalog.length })}
-                      className={inputCls("w-full pl-8")}
-                    />
-                    <datalist id="provider-catalog">
-                      {catalog.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
-
-                  {selected && (
-                    <div className="mt-2 space-y-2">
-                      {oauthMethods.map(({ method: m, index: i }) =>
-                        m.type === "oauth" ? (
-                          <div key={i} className="space-y-1.5">
-                            {(m.prompts ?? []).map((pr) =>
-                              pr.type === "select" ? (
-                                <select
-                                  key={pr.key}
-                                  value={promptInputs[pr.key] ?? ""}
-                                  onChange={(e) =>
-                                    setPromptInputs((s) => ({ ...s, [pr.key]: e.target.value }))
-                                  }
-                                  className={selectCls("w-full")}
-                                >
-                                  <option value="">{pr.message}</option>
-                                  {(pr.options ?? []).map((o) => (
-                                    <option key={o.value} value={o.value}>
-                                      {o.label}
-                                      {o.hint ? ` — ${o.hint}` : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  key={pr.key}
-                                  value={promptInputs[pr.key] ?? ""}
-                                  onChange={(e) =>
-                                    setPromptInputs((s) => ({ ...s, [pr.key]: e.target.value }))
-                                  }
-                                  placeholder={pr.message}
-                                  className={inputCls("w-full")}
-                                />
-                              ),
-                            )}
-                            <button
-                              className={btnGhost("gap-1.5")}
-                              onClick={() => void startOAuth(selected.id, i, promptInputs)}
-                              disabled={busy}
-                            >
-                              <ExternalLink size={12} /> {m.label}
-                            </button>
-                          </div>
-                        ) : null,
-                      )}
-
-                      {selected.id === "amazon-bedrock" && (
-                        <input
-                          value={bedrockRegion}
-                          onChange={(e) => setBedrockRegion(e.target.value)}
-                          aria-label={t("providers.bedrockRegionLabel")}
-                          placeholder={t("providers.bedrockRegionPlaceholder")}
-                          className={inputCls("w-full font-mono")}
-                          disabled={bedrockRegionLoading}
-                        />
-                      )}
-
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="password"
-                          value={keyInput}
-                          onChange={(e) => setKeyInput(e.target.value)}
-                          placeholder={`${selected.name} ${t("providers.apiKeyLabel")}${selected.env[0] ? ` (${selected.env[0]})` : ""}`}
-                          className={inputCls("flex-1 font-mono")}
-                        />
-                        <button
-                          className={btnAccent()}
-                          onClick={() => void saveKey(selected.id)}
-                          disabled={
-                            busy ||
-                            bedrockRegionLoading ||
-                            !keyInput.trim() ||
-                            !validBedrockRegion
-                          }
-                        >
-                          <Check size={13} /> {t("common:actions.save")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {oauth && (
-                    <div className="mt-2 space-y-2 rounded-input bg-surface-2 p-3">
-                      <p className="text-xs leading-relaxed text-muted">{oauth.instructions}</p>
-                      {oauth.method === "code" ? (
-                        <>
-                          <input
-                            value={codeInput}
-                            onChange={(e) => setCodeInput(e.target.value)}
-                            placeholder={t("providers.pasteCode")}
-                            className={inputCls("w-full font-mono")}
-                          />
-                          <button
-                            className={btnAccent()}
-                            onClick={() => void completeOAuth()}
-                            disabled={busy || !codeInput.trim()}
-                          >
-                            {busy ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              <Check size={13} />
-                            )}
-                            {t("providers.completeLogin")}
-                          </button>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-2 text-xs text-muted">
-                          <Loader2 size={12} className="shrink-0 animate-spin" />
-                          {t("providers.waitingForBrowser")}
-                          <button
-                            className="text-muted underline transition-colors hover:text-text"
-                            onClick={cancelOAuth}
-                          >
-                            {t("common:actions.cancel")}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Custom endpoint */}
-                <div className="border-t border-faint">
-                  <button
-                    className="flex h-10 w-full items-center gap-2 px-3 text-left text-[13px] text-muted transition-colors hover:text-text"
-                    onClick={() => setShowCustom((s) => !s)}
-                    aria-expanded={showCustom}
-                  >
-                    <ChevronRight
-                      size={13}
-                      className={cn("transition-transform", showCustom && "rotate-90")}
-                    />
-                    {t("providers.customEndpoint")}
-                    <span className="text-xs text-muted/70">
-                      {t("providers.customEndpointHint")}
-                    </span>
-                  </button>
-                  {showCustom && (
-                    <div className="space-y-2 px-3 pb-3">
-                      <div className="flex gap-2">
-                        <input
-                          value={cName}
-                          onChange={(e) => setCName(e.target.value)}
-                          placeholder={t("providers.customNamePlaceholder")}
-                          className={inputCls("flex-1")}
-                        />
-                        <select
-                          value={cNpm}
-                          onChange={(e) => setCNpm(e.target.value)}
-                          className={selectCls("w-[190px]")}
-                        >
-                          <option value="@ai-sdk/openai-compatible">{t("providers.openaiCompatible")}</option>
-                          <option value="@ai-sdk/anthropic">{t("providers.anthropicCompatible")}</option>
-                        </select>
-                      </div>
-                      <input
-                        value={cUrl}
-                        onChange={(e) => setCUrl(e.target.value)}
-                        placeholder={t("providers.customUrlPlaceholder")}
-                        className={inputCls("w-full font-mono")}
-                      />
-                      <div className="flex gap-2">
-                        <input
-                          type="password"
-                          value={cKey}
-                          onChange={(e) => setCKey(e.target.value)}
-                          placeholder={t("providers.customKeyPlaceholder")}
-                          className={inputCls("flex-1 font-mono")}
-                        />
-                        <input
-                          value={cModels}
-                          onChange={(e) => setCModels(e.target.value)}
-                          placeholder={t("providers.customModelsPlaceholder")}
-                          className={inputCls("flex-1 font-mono")}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          inputMode="numeric"
-                          value={cCtx}
-                          onChange={(e) => setCCtx(e.target.value.replace(/[^0-9]/g, ""))}
-                          placeholder={t("providers.customContextPlaceholder")}
-                          className={inputCls("flex-1 font-mono")}
-                        />
-                        {isTauri && (
-                          <button
-                            className={btnGhost()}
-                            onClick={() => void fetchCustomModels()}
-                            disabled={cDetecting || !cUrl.trim()}
-                          >
-                            {cDetecting ? t("providers.fetchingModels") : t("providers.fetchModels")}
-                          </button>
-                        )}
-                      </div>
-                      {cDetected !== null && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {cDetected.length === 0 && (
-                            <span className="text-xs text-muted">{t("providers.noModelsFound")}</span>
-                          )}
-                          {cDetected.map((m) => {
-                            const selected = modelList(cModels).includes(m.id);
-                            return (
-                              <button
-                                key={m.id}
-                                onClick={() => toggleDetectedModel(m.id)}
-                                aria-pressed={selected}
-                                className={cn(
-                                  "rounded-full border px-2.5 py-1 font-mono text-xs transition-colors",
-                                  selected
-                                    ? "border-accent bg-accent/10 text-text"
-                                    : "border-faint text-muted hover:text-text",
-                                )}
-                              >
-                                {m.id}
-                                {m.context ? (
-                                  <span className="text-muted"> · {`${Math.round(m.context / 1000)}k`}</span>
-                                ) : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <button className={btnAccent()} onClick={() => void saveCustom()} disabled={busy}>
-                        {t("providers.addEndpoint")}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {isTauri && (
-                <button
-                  className="flex items-center gap-1.5 border-t border-faint px-3 py-2.5 text-xs text-muted transition-colors hover:text-text"
-                  onClick={() => void importLogin()}
-                  disabled={busy}
-                >
-                  <Download size={12} />
-                  {t("providers.importLogin")}
-                </button>
-              )}
-            </>
-          )}
-        </ProviderManagerCard>
-        )}
 
         {/* ---- MCP servers ---- */}
         {section === "connectors" && (
@@ -1648,7 +708,7 @@ export function SettingsPage() {
         )}
 
         {/* ---- Review ---- */}
-        {section === "general" && runtimeKind !== "acp" && (
+        {section === "general" && (
         <Section title={t("review.title")} hint={t("review.hint")} flush>
           <div className="divide-y divide-faint">
             <Row
@@ -1666,11 +726,8 @@ export function SettingsPage() {
         </Section>
         )}
 
-        {/* ---- Which agent this app drives: OpenCode, or an ACP agent (#14) ---- */}
-        {section === "runtime" && <AcpAgentsCard />}
-
         {/* ---- Local Python kernel ---- */}
-        {section === "runtime" && isTauri && (
+        {section === "general" && isTauri && (
           <Section title={t("python.title")} hint={t("python.hint")}>
             <div className="flex items-center gap-2 text-[13px]">
               <span

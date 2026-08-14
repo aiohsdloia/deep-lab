@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { ModelStatus, RuntimeStatus } from "@deeplab/shared";
+import type { RuntimeStatus } from "@deeplab/shared";
 import { useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
 
@@ -10,23 +10,13 @@ const RUNTIME_TONE: Record<RuntimeStatus, string> = {
   offline: "bg-muted",
 };
 
-const MODEL_TONE: Record<ModelStatus, string> = {
-  connected: "bg-ok",
-  disconnected: "bg-muted",
-  error: "bg-error",
-};
-
-/** Runtime + model as compact status rows: the label ("运行时" / "模型") with a
- *  status "light" to its right — green / amber / red / gray says whether each is
- *  up, judged from the dot alone. The slightly larger ringed dot reads as
- *  infrastructure rather than a session's small green dot; hover shows the exact
- *  status. */
+/** The runtime status row: the label ("运行时") with a status "light" to its
+ *  right — green / amber / red / gray says whether the sidecar is up, judged
+ *  from the dot alone. The slightly larger ringed dot reads as infrastructure
+ *  rather than a session's small green dot; hover shows the exact status. */
 export function StatusPills() {
   const { t } = useTranslation("nav");
-  // Both live from the runtime: connection status + the configured default model.
   const runtime = useRuntimeStore((s) => s.status);
-  const defaultModel = useRuntimeStore((s) => s.defaultModel);
-  const model: ModelStatus = defaultModel ? "connected" : "disconnected";
 
   return (
     <div className="flex shrink-0 items-center gap-3 pr-1 text-xs text-muted">
@@ -37,14 +27,6 @@ export function StatusPills() {
       >
         <span>{t("status.runtime")}</span>
         <span className={cn("h-2 w-2 rounded-full ring-2 ring-border", RUNTIME_TONE[runtime])} />
-      </span>
-      <span
-        className="flex items-center gap-1.5"
-        title={`${t("status.model")}: ${model}`}
-        aria-label={`${t("status.model")}: ${model}`}
-      >
-        <span>{t("status.model")}</span>
-        <span className={cn("h-2 w-2 rounded-full ring-2 ring-border", MODEL_TONE[model])} />
       </span>
     </div>
   );

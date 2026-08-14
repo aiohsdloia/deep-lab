@@ -36,8 +36,6 @@ import {
   walkWorkspace,
 } from "@/components/thread/references";
 import { ModelPicker } from "@/components/thread/ModelPicker";
-import { AcpConfigPicker } from "@/components/thread/AcpConfigPicker";
-import type { AcpConfigOption } from "@deeplab/sdk/acp";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { useUiStore } from "@/lib/store";
 import { parkDraft, unparkDraft, type ComposerDraft } from "@/lib/composerStash";
@@ -145,8 +143,6 @@ export function Composer({
   onAgentModeChange,
   showModelPicker,
   modelSessionId,
-  configOptions,
-  onConfigOption,
   showWorkspaceChip = true,
   draftKey,
   sessionDir,
@@ -182,11 +178,6 @@ export function Composer({
   /** Bind the model picker to a session (per-pane model/effort); omit for the
    *  global default. */
   modelSessionId?: string;
-  /** An ACP agent's OWN session selectors (model, reasoning level, mode). They
-   *  replace the model picker when an ACP agent is driving: the agent owns its
-   *  model, and these are the choices it actually offers (#14). */
-  configOptions?: AcpConfigOption[];
-  onConfigOption?: (configId: string, value: string) => void;
   /** Show the draft workspace-folder chip. Only the draft pane opts in — in a
    *  split layout the other panes already have a bound session/folder. */
   showWorkspaceChip?: boolean;
@@ -1119,9 +1110,6 @@ export function Composer({
             >
               <Send size={14} />
             </button>
-          )}
-          {configOptions && onConfigOption && (
-            <AcpConfigPicker options={configOptions} onChange={onConfigOption} disabled={working} />
           )}
           {working && onStop ? (
             // Same spot, same shape, one action: the send button becomes Stop

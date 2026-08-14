@@ -130,7 +130,11 @@
     "noResults": "没有模型匹配“{{query}}”。",
     "clearSearch": "清除搜索",
     "addFavorite": "将 {{model}} 添加到收藏",
-    "removeFavorite": "从收藏中移除 {{model}}"
+    "removeFavorite": "从收藏中移除 {{model}}",
+    "apiKeyLabel": "DeepSeek API 密钥",
+    "apiKeyHint": "用于调用 DeepSeek 提供商。保存在应用密钥库中。",
+    "apiKeyPlaceholder": "sk-...",
+    "selectModel": "模型"
   },
   "providers": {
     "title": "供应商",

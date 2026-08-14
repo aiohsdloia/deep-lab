@@ -277,15 +277,6 @@ export async function acpServerScript(): Promise<string | null> {
   return await invoke<string | null>("acp_server_script");
 }
 
-/** Absolute path of the bundled DeepSeek Harness ACP launcher (the only ACP
- *  preset whose runtime ships inside the app), or null when it was not fetched
- *  (dev tree without `scripts/dev/fetch-dsh-acp.sh`). */
-export async function dshAcpLauncher(): Promise<string | null> {
-  if (!isTauri) return null;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return await invoke<string | null>("dsh_acp_launcher");
-}
-
 /** Enable/disable + set binding and access mode; (re)binds the server. */
 export async function setGatewayConfig(
   enabled: boolean,

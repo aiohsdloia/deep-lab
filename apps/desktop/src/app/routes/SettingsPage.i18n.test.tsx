@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderAt } from "@/test/render";
@@ -34,54 +34,32 @@ describe("Settings page strings (i18n)", () => {
   });
 
   it("renders each section's own title and disconnected-runtime prompt", async () => {
-    const runtime = renderAt("/settings/runtime");
-    expect(await screen.findByText("Agent runtime")).toBeInTheDocument();
-    runtime.unmount();
-
     const connectors = renderAt("/settings/connectors");
     expect(await screen.findByText("MCP servers")).toBeInTheDocument();
     expect(screen.getByText("Connect the runtime to configure MCP servers.")).toBeInTheDocument();
     connectors.unmount();
 
     renderAt("/settings/models");
-    expect(await screen.findByText("Connect the runtime to configure models.")).toBeInTheDocument();
+    expect(await screen.findByText("DeepSeek API key")).toBeInTheDocument();
   });
 
-  it("shows auto-review for OpenCode and hides the inapplicable control for ACP", async () => {
-    const originalKind = useRuntimeStore.getState().runtimeKind;
-    let view: ReturnType<typeof renderAt> | undefined;
-    try {
-      act(() => useRuntimeStore.setState({ runtimeKind: "dsh" }));
-      view = renderAt("/settings");
-      expect(
-        await screen.findByRole("switch", { name: "Review after every turn that changes files" }),
-      ).toBeInTheDocument();
-      view.unmount();
-
-      act(() => useRuntimeStore.setState({ runtimeKind: "acp" }));
-      view = renderAt("/settings");
-      expect(screen.getByRole("heading", { level: 2, name: "Workspace" })).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { level: 2, name: "Review" })).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole("switch", { name: "Review after every turn that changes files" }),
-      ).not.toBeInTheDocument();
-    } finally {
-      view?.unmount();
-      act(() => useRuntimeStore.setState({ runtimeKind: originalKind }));
-    }
+  it("shows the auto-review control on the general section", async () => {
+    const view = renderAt("/settings");
+    expect(
+      await screen.findByRole("switch", { name: "Review after every turn that changes files" }),
+    ).toBeInTheDocument();
+    view.unmount();
   });
 
-  it("renders separate model browsing and provider management surfaces when connected", async () => {
+  it("renders the model settings form with the Flash/Pro choice", async () => {
     const original = useRuntimeStore.getState();
     let view: ReturnType<typeof renderAt> | undefined;
     try {
-      useRuntimeStore.setState({ status: "ready", defaultModel: null });
+      useRuntimeStore.setState({ status: "ready", defaultModel: "deepseek-official/deepseek-v4-flash" });
       view = renderAt("/settings/models");
-      // No client behind this render: the Models card sits in its loading
-      // state while the separate Providers card is already on screen.
-      expect(await screen.findByText("Loading the model catalog…")).toBeInTheDocument();
-      expect(screen.getByRole("heading", { level: 2, name: "Providers" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Manage" })).toHaveAttribute("aria-expanded", "false");
+      expect(await screen.findByText("Flash")).toBeInTheDocument();
+      expect(screen.getByText("Pro")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Flash/ })).toHaveAttribute("aria-pressed", "true");
     } finally {
       view?.unmount();
       useRuntimeStore.setState({ status: original.status, defaultModel: original.defaultModel });

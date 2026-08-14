@@ -651,10 +651,18 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     return {};
   }
 
+  /** The dsh DeepSeek provider reads its key from this credential ref. */
+  private readonly apiKeyRef = "DEEPSEEK_API_KEY";
+
   async setProviderApiKey(providerID: string, key: string): Promise<void> {
-    // dsh credentials are environment references; the ref name mirrors the
-    // provider route (ANTHROPIC_API_KEY-style) via settings, but the safe
-    // primitive is the credentials domain.
+    // The dsh DeepSeek provider route (`deepseek-official`) resolves its bearer
+    // token from the `DEEPSEEK_API_KEY` credential ref. Store through the
+    // credentials domain so the value rides the app's secret store, never the
+    // session log or settings.
+    if (providerID === "deepseek-official" || providerID === "deepseek") {
+      await this.api.call("credentials.set", { ref: this.apiKeyRef, value: key });
+      return;
+    }
     const ref = providerID.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY";
     await this.api.call("credentials.set", { ref, value: key });
   }
@@ -668,6 +676,10 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async removeProviderAuth(providerID: string): Promise<void> {
+    if (providerID === "deepseek-official" || providerID === "deepseek") {
+      await this.api.call("credentials.unset", { ref: this.apiKeyRef }).catch(() => undefined);
+      return;
+    }
     const ref = providerID.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY";
     await this.api.call("credentials.unset", { ref }).catch(() => undefined);
   }

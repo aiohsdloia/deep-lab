@@ -16,7 +16,6 @@ import {
   type SkillInfo,
   type ToolCallStatus,
 } from "@deeplab/sdk";
-import { AcpRuntime, toAcpMcpServers, type AcpConfigOption } from "@deeplab/sdk/acp";
 import type {
   ArtifactBlock,
   ReviewerBlock,
@@ -56,8 +55,6 @@ import {
   type ToolStatus,
 } from "./tauri";
 import { isGatewayWeb, gatewayToken, gatewayOrigin } from "./webMode";
-import { activeAcpAgent } from "./acpAgents";
-import { acpTransport } from "./acpTransport";
 import { samePath } from "./workspacePath";
 import { kernelReset } from "./kernel";
 import { moveScrollMemory } from "./scrollMemory";
@@ -198,7 +195,15 @@ function saveRecord(key: string, rec: Record<string, unknown>): void {
 
 function initialUrl(): string {
   if (typeof window === "undefined") return DEFAULT_DSH_URL;
-  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_DSH_URL;
+  const stored = window.localStorage.getItem(URL_KEY);
+  if (stored) return stored;
+  // Plain-browser dev (`pnpm dev`, no Tauri, not the gateway): vite proxies the
+  // same-origin /api prefix to the dsh sidecar (see vite.config.ts server.proxy)
+  // so the app talks to the same origin and the browser-trust fence passes.
+  if (!isTauri && !isGatewayWeb && typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return DEFAULT_DSH_URL;
 }
 function initialHidden(): string[] {
   if (typeof window === "undefined") return [];
@@ -312,26 +317,9 @@ export interface PaneState {
   revealPath?: string;
 }
 
-/** Which runtime the current connection drives: the bundled OpenCode sidecar, or
- *  a user-configured ACP agent (#14). The UI reads it to withhold controls the
- *  ACP dialect cannot honour — a model picker that silently changed nothing
- *  would be worse than no picker (AGENTS.md). */
-export type RuntimeKind = "dsh" | "acp";
-
 interface RuntimeState {
   status: RuntimeStatus;
   serverUrl: string;
-  runtimeKind: RuntimeKind;
-  /** The connected ACP agent's display name, or null on OpenCode. */
-  acpAgentName: string | null;
-  /** The ACP agent's OWN selectors per session — model, reasoning level,
-   *  permission mode — as it reported them (`configOptions`). This is what the
-   *  composer offers instead of our model picker: ACP v1 changes a model through
-   *  `session/set_config_option`, and the choices belong to the agent. */
-  acpConfigOptions: Record<string, AcpConfigOption[]>;
-  /** Set one of them. The agent answers with its complete list, which replaces
-   *  ours — picking a model can change which reasoning levels exist. */
-  setAcpConfigOption: (sessionId: string, configId: string, value: string) => Promise<void>;
   sessions: SessionMeta[];
   currentId: string | null;
   threads: Record<string, Thread>;
@@ -634,23 +622,7 @@ interface RuntimeState {
 // provider/MCP surface that lives outside the AgentRuntime contract.
 let client: AgentRuntime | null = null;
 let opencodeClient: DshRuntime | null = null;
-/** The live ACP runtime and the agent id it was started for, kept ACROSS
- *  reconnects (#14). The app reconnects whenever the workspace moves — every new
- *  session does — and ACP binds the folder per session (`session/new`'s cwd),
- *  not per process: the spec requires the session's cwd to be used "regardless
- *  of where the Agent subprocess was spawned". So a move re-points `setCwd` and
- *  keeps the child, instead of paying an agent cold start (an `npx` boot) and
- *  killing every session that child was holding. */
-let acpRuntime: AcpRuntime | null = null;
-let acpRuntimeAgentId: string | null = null;
 let openSessionSeq = 0;
-/** The runtime class the last successful connect drove, remembered across
- *  connects so a runtime SWITCH can be told apart from a same-runtime reconnect
- *  (workspace move, model change). Sessions are runtime-owned: switching from
- *  OpenCode to an ACP agent (or back) makes every previously-open conversation
- *  unknown to the new runtime — sending into one would fail with "unknown
- *  session". On a switch the store resets to a fresh draft instead. */
-let lastRuntimeKind: RuntimeKind | null = null;
 /** The model the user last DELIBERATELY switched to, and when. A switch does a
  *  masked reconnect, and connect() fires loadCatalog() un-awaited — so the
  *  self-heal there can run just after `switching` clears, read the reconnecting
@@ -701,25 +673,13 @@ function clearStatusBlip() {
   if (statusBlipTimer !== null) clearTimeout(statusBlipTimer);
   statusBlipTimer = null;
 }
-/**
- * Drop the current connection. `keep` is the one runtime a reconnect intends to
- * REUSE (the live ACP agent when the selection has not changed): closing it
- * would kill the agent process and every session it holds, only to spawn the
- * same command again a moment later.
- */
-function teardownClient(keep?: AgentRuntime | null) {
+/** Drop the current connection. */
+function teardownClient() {
   clientStatusUnsub?.();
   clientStatusUnsub = null;
   clearStatusBlip();
-  if (client && client !== keep) {
+  if (client) {
     client.close();
-    // Closing the ACP runtime kills its child (the transport's `close` stops it),
-    // so the module handle must go with it — otherwise the next connect would
-    // reuse a runtime whose agent is gone.
-    if (client === acpRuntime) {
-      acpRuntime = null;
-      acpRuntimeAgentId = null;
-    }
   }
   client = null;
   opencodeClient = null;
@@ -786,58 +746,6 @@ function blankDraft(s: RuntimeState, key: string = DRAFT_KEY) {
   delete sessionAgents[key];
   return { currentId: null, threads, panes, sessionAgents };
 }
-/**
- * Hand the app's own MCP connectors to the ACP agent.
- *
- * ACP takes MCP servers per session; OpenCode keeps them in its global config.
- * That config is read through a THROWAWAY OpenCodeClient — the sidecar is
- * running either way (it backs the workspace, kernels and the gateway), and
- * `getClient()` must keep answering null under an ACP agent so Settings does not
- * offer a provider surface that is not driving anything.
- *
- * Best-effort by design: a connector list that cannot be read must not stop the
- * agent from connecting. The session simply gets the tools the agent brings.
- *
- * A connector's own credentials (env, headers) travel with it — they are what
- * makes it work, and the bundled runtime already launches these servers with
- * them. Nothing else does: the agent is a command the user configured, and no
- * provider API key of ours is ever part of this payload.
- */
-async function shareMcpServers(runtime: AcpRuntime, baseUrl: string, _password: string | null) {
-  try {
-    const config = new DshRuntime({
-      baseUrl,
-    });
-    const servers = await config.listMcpServers();
-    const acp = toAcpMcpServers(
-      Object.fromEntries(
-        servers.filter((s) => s.config).map((s) => [s.name, s.config!]),
-      ),
-    );
-    runtime.setMcpServers(acp);
-    if (acp.length > 0) void logDebug(`acp mcp → ${acp.map((s) => s.name).join(", ")}`);
-  } catch (err) {
-    void logDebug(`acp mcp skipped: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-/**
- * Mirror the ACP agent's own session selectors into the store, so the composer
- * can offer them. A local read, not an RPC — and it writes only when they
- * actually changed, since this runs on turn boundaries and a needless write
- * repaints every composer.
- */
-function syncAcpConfig(set: StoreSet, sessionId: string): void {
-  const rt = acpRuntime;
-  if (!rt || client !== rt) return;
-  const options = rt.configOptionsFor(sessionId);
-  set((s) => {
-    const current = s.acpConfigOptions[sessionId] ?? [];
-    if (JSON.stringify(current) === JSON.stringify(options)) return {};
-    return { acpConfigOptions: { ...s.acpConfigOptions, [sessionId]: options } };
-  });
-}
-
 /** Threads key for the draft conversation — its blocks move to the real
  *  session id once the session exists, so the page never visibly resets. */
 export const DRAFT_KEY = "draft";
@@ -1394,8 +1302,6 @@ async function performTurn(
         };
       });
       lockKey = id;
-      // A fresh ACP session reports the agent's own selectors — surface them.
-      syncAcpConfig(set, id);
       // The draft's model/effort override moved onto the real id — repersist so
       // a relaunch restores this pane's model, not the global default.
       saveRecord(SESSION_MODELS_KEY, get().sessionModels);
@@ -1946,21 +1852,6 @@ function modelForTurn(
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   status: "offline",
   serverUrl: initialUrl(),
-  // Reconciled with the saved selection on every connect; OpenCode until then,
-  // which is what a first paint before any connection is actually driving.
-  runtimeKind: "dsh",
-  acpAgentName: null,
-  acpConfigOptions: {},
-  setAcpConfigOption: async (sessionId, configId, value) => {
-    const rt = acpRuntime;
-    if (!rt || client !== rt) return;
-    try {
-      const options = await rt.setConfigOption(sessionId, configId, value);
-      set((s) => ({ acpConfigOptions: { ...s.acpConfigOptions, [sessionId]: options } }));
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
-    }
-  },
   sessions: [],
   currentId: null,
   threads: {},
@@ -2386,18 +2277,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   connect: async () => {
-    // The runtime SELECTOR, decided before anything is torn down: a live ACP
-    // agent for the SAME configured entry is reused across this reconnect
-    // (see `acpRuntime`) — the workspace moves, the agent process does not.
-    const acpAgent = !isGatewayWeb && isTauri ? activeAcpAgent() : null;
-    const reusableAcp =
-      acpAgent && acpRuntime && acpRuntimeAgentId === acpAgent.id && acpRuntime.getStatus() === "ready"
-        ? acpRuntime
-        : null;
+    // DeepLab drives exactly one runtime: the bundled DeepSeek Harness (dsh)
+    // sidecar. No runtime switching exists — a connect is always a (re)connect
+    // to the same sidecar, so the session view is never reset by a switch.
     // Quiet teardown of any previous connection: within a (re)connect the
     // status must never pass through "offline" — on first boot the retry loop
     // runs for minutes (macOS TCC) and each flip repaints the whole page.
-    teardownClient(reusableAcp);
+    teardownClient();
     let directory: string | null;
     let password: string | null;
     let baseUrl = get().serverUrl;
@@ -2405,8 +2291,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // connect that lands somewhere else must not reuse them (#92).
     const previousWorkspace = get().workspace;
     if (isGatewayWeb) {
-      // Web client: same-origin gateway; the pasted token is the OpenCodeClient
-      // password, and the workspace directory comes from /v1/whoami.
+      // Web client: same-origin gateway; the pasted token is the gateway's
+      // auth, and the workspace directory comes from /v1/whoami.
       baseUrl = gatewayOrigin();
       password = gatewayToken();
       directory = null;
@@ -2436,95 +2322,18 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // own token (see the isGatewayWeb branch above).
       password = null;
     }
-    // A configured ACP agent replaces `OpenCodeClient` as THE runtime for this
-    // connection (docs/rfc/multi-agent-acp.md) — same `AgentRuntime` seam, so the
-    // store, the thread, provenance and runs are unchanged. Desktop only: the
-    // agent is a child process on this host, which a phone running the gateway
-    // web client does not have.
-    let c: AgentRuntime;
-    if (acpAgent) {
-      // ACP takes the workspace folder per session (`session/new`'s cwd) — so
-      // without one there is nothing to create a session in.
-      if (!directory) {
-        set({ error: "No workspace folder to run the ACP agent in.", status: "error" });
-        return;
-      }
-      let acp: AcpRuntime;
-      try {
-        if (reusableAcp) {
-          // Same agent, still alive: point new sessions at this folder and keep
-          // the process. Sessions it already holds keep their own folder — the
-          // agent binds cwd per session, so nothing that is running moves.
-          reusableAcp.setCwd(directory);
-          acp = reusableAcp;
-        } else {
-          const transport = await acpTransport(acpAgent.id, acpAgent.command, acpAgent.args);
-          acp = new AcpRuntime({ transport, cwd: directory, name: acpAgent.name });
-          acpRuntime = acp;
-          acpRuntimeAgentId = acpAgent.id;
-        }
-        client = acp;
-        c = acp;
-        // No OpenCode instance backs this connection: `getClient()` must answer
-        // null so Settings' provider/MCP surface hides instead of PATCHing a
-        // sidecar that is not driving anything.
-        opencodeClient = null;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        void logDebug(`acp start FAILED (${acpAgent.command}): ${msg}`);
-        set({ error: msg, status: "error", runtimeKind: "acp", acpAgentName: acpAgent.name });
-        return;
-      }
-      // The app's own connectors are per-session in ACP, so the agent has to
-      // know them BEFORE any session is created (#14). Awaited only on a fresh
-      // child: on a reuse the list is already loaded, and every new session
-      // reconnects — paying a config round-trip each time would put the
-      // sidecar's latency in front of every "New".
-      if (reusableAcp) void shareMcpServers(acp, baseUrl, password);
-      else await shareMcpServers(acp, baseUrl, password);
-      // The OpenCode catalog belongs to the runtime that is no longer driving:
-      // an ACP agent owns its own model choice (v1 changes it through
-      // `session/set_config_option`, from the agent's own list), so leaving the
-      // old providers on screen would offer a switch that does nothing.
-      set({ runtimeKind: "acp", acpAgentName: acpAgent.name, providers: [], defaultModel: null });
-    } else {
-      const oc = new DshRuntime({
-        baseUrl,
-        directory: directory ?? undefined,
-      });
-      opencodeClient = oc;
-      client = oc;
-      c = oc;
-      set({ runtimeKind: "dsh", acpAgentName: null });
-      // Background streams reuse the same sidecar; the foreground now streams
-      // this folder, so drop any background stream that was covering it (avoid a
-      // double fold of the same events).
-      streamBaseUrl = baseUrl;
-      if (directory) removeStreamClient(directory);
-    }
-    // A runtime SWITCH (OpenCode ⇄ ACP, or one ACP agent to another) changes
-    // whose sessions the sidebar and the open pane address. The previous
-    // runtime's conversations are not loadable by the new one — sending into
-    // one would fail with "unknown session" — so the view resets to a fresh
-    // draft rather than pointing the composer at a session nobody owns now.
-    const newKind = acpAgent ? "acp" : "dsh";
-    const runtimeSwitched = lastRuntimeKind !== null && lastRuntimeKind !== newKind;
-    lastRuntimeKind = newKind;
-    if (runtimeSwitched) {
-      set({
-        sessions: [],
-        sessionParents: {},
-        currentId: null,
-        threads: {},
-        panes: {},
-        runningSessions: {},
-        shellTurns: {},
-        sessionModels: {},
-        sessionVariants: {},
-        sessionAgents: {},
-        acpConfigOptions: {},
-      });
-    }
+    const oc = new DshRuntime({
+      baseUrl,
+      directory: directory ?? undefined,
+    });
+    opencodeClient = oc;
+    client = oc;
+    const c: AgentRuntime = oc;
+    // Background streams reuse the same sidecar; the foreground now streams
+    // this folder, so drop any background stream that was covering it (avoid a
+    // double fold of the same events).
+    streamBaseUrl = baseUrl;
+    if (directory) removeStreamClient(directory);
     clientStatusUnsub = c.onStatus((status) => {
       void logDebug(`status → ${status}`);
       if (status === "connecting" && get().status === "ready") {
@@ -3066,7 +2875,6 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         }
       }
       if (event.type === "session.idle" && !backgroundReviewParent) {
-        syncAcpConfig(set, sid);
         void get().refreshSessions();
         // Name the session in the snapshot: a project folder is shared by many
         // sessions, and its git history must say which one made each change.
@@ -3196,14 +3004,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         await get().connectRetry();
         return;
       }
-      // Plain-browser dev (`pnpm dev`, no Tauri): vite proxies the same-origin
-      // `/api` prefix to the dsh sidecar (see vite.config.ts server.proxy), so
-      // the app talks to the same origin and the browser-trust fence passes.
-      if (!isTauri) {
-        set({ serverUrl: window.location.origin });
-        await get().connectRetry();
-        return;
-      }
+      if (!isTauri) return;
       void logDebug("bootstrap: starting bundled runtime");
       try {
         const url = await startRuntime();
@@ -3525,9 +3326,6 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // run-proof resolves) and must not read as interrupted.
       if (lastTurnInterrupted(messages) && !stillStreaming) markInterrupted(id, []);
       else unmarkInterrupted(id);
-      // A replayed ACP session reports its selectors during the load — show the
-      // model it is actually on, not the one the last session used.
-      syncAcpConfig(set, id);
       set((s) => ({
         threads: {
           ...s.threads,
@@ -3804,12 +3602,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           const files = await imageAttachmentParts(attachments ?? []);
           await client!.sendPrompt(sid, text, agent, model, variant, clean, files);
         }),
-      // An ACP turn is a SYNC turn: `session/prompt` is one JSON-RPC request that
-      // answers when the turn is over, where OpenCode's `prompt_async` answers as
-      // soon as it is accepted. Without this the running lock would be taken
-      // AFTER the turn's own `session.idle` had already cleared it, leaving a
-      // spinner turning under a finished answer until the next reconcile.
-      s.runtimeKind === "acp",
+      false,
       false,
       sessionId,
       draftKey,
@@ -4172,9 +3965,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         get,
         echo,
         (sid) => withRetry(() => client!.sendPrompt(sid, prompt, undefined, model)),
-        // Same reason as the composer's send: an ACP `session/prompt` answers
-        // when the turn is OVER, so its lock has to be taken before the call.
-        get().runtimeKind === "acp",
+        false,
         false,
         id,
       );

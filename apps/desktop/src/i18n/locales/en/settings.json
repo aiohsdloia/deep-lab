@@ -130,7 +130,11 @@
     "noResults": "No models match “{{query}}”.",
     "clearSearch": "Clear search",
     "addFavorite": "Add {{model}} to favorites",
-    "removeFavorite": "Remove {{model}} from favorites"
+    "removeFavorite": "Remove {{model}} from favorites",
+    "apiKeyLabel": "DeepSeek API key",
+    "apiKeyHint": "Used to call the DeepSeek provider. Stored in the app secret store.",
+    "apiKeyPlaceholder": "sk-...",
+    "selectModel": "Model"
   },
   "providers": {
     "title": "Providers",

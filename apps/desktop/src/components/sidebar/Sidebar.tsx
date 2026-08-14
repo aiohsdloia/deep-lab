@@ -138,12 +138,6 @@ export function Sidebar() {
   const sessionParents = useRuntimeStore((s) => s.sessionParents);
   const interruptedSessions = useRuntimeStore((s) => s.interruptedSessions);
   const webReadOnly = useRuntimeStore((s) => s.webReadOnly);
-  // An ACP agent drives instead of the bundled OpenCode runtime (#14). Projects
-  // are an OpenCode concept (persistent, folder-backed conversations); an ACP
-  // agent owns its own ephemeral sessions, so the whole project block is
-  // withheld rather than offering create/rename/delete on a structure that
-  // does not apply to the runtime in use.
-  const acp = useRuntimeStore((s) => s.runtimeKind) === "acp";
   const activeRoots = new Set(
     Object.keys(runningSessions).map((sid) => rootSessionOf(sessionParents, sid)),
   );
@@ -708,7 +702,6 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-2 flex-1 overflow-y-auto px-3 pb-2">
-          {!acp && (
           <>
           <div className="flex items-center gap-1 px-0.5 py-1">
             <button
@@ -989,7 +982,6 @@ export function Sidebar() {
             </button>
           )}
           </>
-          )}
           <div className="mt-3 flex items-center gap-1 px-0.5 py-1">
             {/* Every conversation ever, searchable — clicking "会话 >" opens the
                 full history (#65), matching how the Projects heading works. */}
