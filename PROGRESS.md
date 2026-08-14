@@ -23,6 +23,18 @@ Results and blockers only.
 - Per-session model select persists per session (`session.selectModel`) rather than a global default; `setDefaultModel` applies to live sessions.
 - `session.list` is unpaginated in dsh v1; `querySessions` pages in the client.
 
+## Isolation leftovers (dsh-architecture migration backlog)
+
+- `runtime/tools/{ssh_connect,present_artifact}.ts` still import
+  `@opencode-ai/plugin` (they work — dsh loads them — but should be rewritten
+  with dsh's native tool schema).
+- Approval mode / memory / agent-model settings are stored by
+  `dsh_config.rs` in a private `dsh.json` under the app config dir; dsh reads
+  its own `settings.yaml`, so these should move to dsh's `settings.*` domain
+  (approval policy lives in dsh's permission-presets).
+- Legacy path migration (OpenLab/OpenScience/`.openlab`) remains so old
+  workspaces keep working; it will be dropped once all workspaces are native.
+
 ## Desktop connection model (verified)
 
 The bundled sidecar is loopback-only and dsh's browser-trust fence demands
