@@ -2553,6 +2553,18 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
             },
           }));
           return;
+        case "session.renamed": {
+          // dsh auto-named the session (fallback or LLM summary) after the
+          // first turn — update the sidebar row so it stops showing the raw id.
+          if (event.title && event.title.trim()) {
+            set((s) => ({
+              sessions: s.sessions.map((m) =>
+                m.id === event.sessionId ? { ...m, title: event.title } : m,
+              ),
+            }));
+          }
+          return;
+        }
         case "message.agent": {
           // A user message landed. Tag the newest still-untagged user block in
           // this thread with its server id — the optimistic echo from a send

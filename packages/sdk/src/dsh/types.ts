@@ -52,6 +52,8 @@ export interface SessionSummary {
   cwd?: string;
   agentPreset?: string;
   title?: string;
+  /** Projected per-session facts; the auto-generated title lives here. */
+  projections?: { values?: { title?: string } };
 }
 
 export interface HistoryEntry {

@@ -66,6 +66,13 @@ export interface SessionIdleEvent {
   type: "session.idle";
   sessionId: string;
 }
+/** The runtime auto-named the session (dsh appends a `session/title` event after
+ *  the first turn) — the app renames the sidebar row to match. */
+export interface SessionRenamedEvent {
+  type: "session.renamed";
+  sessionId: string;
+  title: string;
+}
 /** The turn's model call failed and the server is retrying it — OpenCode backs
  *  off exponentially with NO attempt cap, so without surfacing these the UI
  *  shows a bare "Working…" forever while every attempt fails. */
@@ -162,6 +169,7 @@ export type OpenCodeEvent =
   | StepUpdatedEvent
   | ToolUpdatedEvent
   | SessionIdleEvent
+  | SessionRenamedEvent
   | MessageAgentEvent
   | SessionRetryEvent
   | RuntimeErrorEvent

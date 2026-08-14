@@ -101,6 +101,14 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
    * collapses to its last one-or-two-character chunk.
    */
   private readonly streamText = new Map<string, string>();
+  /**
+   * Session ids the user archived via the workspace. dsh's `session.list` does
+   * NOT filter archived rows (nor does its list row carry an archived marker),
+   * so the SDK keeps the authoritative `archivedSessionIds` that dsh persists
+   * in the workspace state and refreshes it from `workspace.list` — a deleted /
+   * archived conversation must not reappear after a reconnect or app restart.
+   */
+  private archivedIds = new Set<string>();
 
   constructor(options: DshRuntimeOptions) {
     super();
@@ -355,6 +363,15 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       case "turn/end":
         this.emit({ type: "session.idle", sessionId });
         break;
+      case "session/title": {
+        // dsh auto-names the session (fallback or LLM summary) after the first
+        // turn — surface it so the app renames the sidebar row.
+        const title = (event.data as { title?: string })?.title;
+        if (title && title.trim()) {
+          this.emit({ type: "session.renamed", sessionId, title });
+        }
+        break;
+      }
       default:
         break;
     }
@@ -381,9 +398,32 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     return result.sessionId;
   }
 
-  async listSessions(): Promise<SessionMeta[]> {
+  /** Refresh the locally-known archived ids from dsh's persisted workspace
+   *  state, so an archived conversation stays hidden across reconnects. */
+  private async refreshArchived(): Promise<void> {
+    try {
+      const result = await this.api.call<{ items?: unknown[]; archivedSessionIds?: string[] }>(
+        "workspace.list",
+      );
+      this.archivedIds = new Set(result.archivedSessionIds ?? []);
+    } catch {
+      /* workspace.list is best-effort; keep the last known set */
+    }
+  }
+
+  private async loadSessions(): Promise<SessionMeta[]> {
+    await this.refreshArchived();
     const result = await this.api.call<{ items: SessionSummary[] }>("session.list");
-    return (result.items ?? []).map(toSessionMeta);
+    const archivedAt = new Map<string, number>();
+    for (const id of this.archivedIds) archivedAt.set(id, Date.now());
+    return (result.items ?? []).map((s) => toSessionMeta(s, archivedAt));
+  }
+
+  async listSessions(): Promise<SessionMeta[]> {
+    const sessions = await this.loadSessions();
+    // listSessions feeds the ACTIVE sidebar list — archived conversations stay
+    // out (querySessions({ archived: true }) reveals them on demand).
+    return sessions.filter((s) => !s.archived);
   }
 
   async querySessions(query: SessionQuery = {}): Promise<SessionPage> {
@@ -392,11 +432,10 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         "session.search",
         { query: query.search },
       );
-      const sessions = (result.items ?? []).map(toSessionMeta);
+      const sessions = (result.items ?? []).map((s) => toSessionMeta(s));
       return { sessions, nextCursor: null };
     }
-    const result = await this.api.call<{ items: SessionSummary[] }>("session.list");
-    let sessions = (result.items ?? []).map(toSessionMeta);
+    let sessions = await this.loadSessions();
     if (!query.archived) sessions = sessions.filter((s) => !s.archived);
     sessions = sessions.sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0));
     return { sessions, nextCursor: null };
@@ -408,12 +447,18 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       return;
     }
     await this.api.call("workspace.archiveSession", { sessionId });
+    this.archivedIds.add(sessionId);
   }
 
   async deleteSession(sessionId: string): Promise<void> {
     // dsh v1 exposes no session-deletion RPC; archiving removes it from the
-    // active surface, matching Open Lab's "archive, never destroy" default.
-    await this.api.call("workspace.archiveSession", { sessionId }).catch(() => undefined);
+    // active surface. The workspace list keeps it out of every future listing.
+    const result = await this.api.call<{ archivedSessionIds?: string[] }>(
+      "workspace.archiveSession",
+      { sessionId },
+    ).catch(() => undefined);
+    if (result?.archivedSessionIds) this.archivedIds = new Set(result.archivedSessionIds);
+    else this.archivedIds.add(sessionId);
   }
 
   /** dsh sessions bind their cwd at create and cannot be re-homed; the app
@@ -773,14 +818,26 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
 // ---- mappers ----
 
-function toSessionMeta(summary: SessionSummary): SessionMeta {
+function toSessionMeta(
+  summary: SessionSummary,
+  archivedAt: ReadonlyMap<string, number> = new Map(),
+): SessionMeta {
+  const archived = archivedAt.get(summary.sessionId);
+  // dsh lists the auto-generated title under projections.values.title (the
+  // top-level `title` field is unset by session.list) — prefer it so a
+  // reconnected/restarted app still shows the summarized name.
+  const title =
+    summary.title?.trim() ||
+    summary.projections?.values?.title?.trim() ||
+    summary.sessionId;
   return {
     id: summary.sessionId,
-    title: summary.title ?? summary.sessionId,
+    title,
     directory: summary.cwd,
     parentId: summary.parentSessionId,
     created: undefined,
     updated: summary.updatedAt,
+    ...(archived !== undefined ? { archived } : {}),
     metadata: summary as unknown as Record<string, unknown>,
   };
 }

@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-08-15 00:10` — Deleted sessions no longer reappear: dsh's `session.list` neither filters archived rows nor returns a title, so the SDK now reads the persisted `workspace.list` archivedSessionIds (filters `listSessions`), reads the auto-generated title from `projections.values.title`, and folds dsh's `session/title` event into a `session.renamed` update (verified: archived sessions stay hidden across new-session/reconnect, conversations show their summarized names).
 - `2026-08-14 22:40` — Desktop build now connects: the bundled dsh sidecar is reached through a same-origin internal gateway (`start_internal` + CORS + a hand-rolled WebSocket upgrade proxy for `/api/events.*`), so the `tauri://localhost` WebView passes dsh's browser-trust fence; verified live (`connect OK`, host+mux streams active end to end).
 - `2026-08-14 21:30` — Simplified DeepLab to dsh-only: removed ACP/OpenCodeClient runtime selection, the runtime settings section, the model browser, and the main-UI model status pill; models are now one DeepSeek API key + a Flash/Pro choice (verified live against dsh's `deepseek-v4-flash`/`deepseek-v4-pro`).
 - `2026-08-14 19:00` — DeepLab scaffolded from open-lab source, rebranded (`@deeplab/*`, `com.sculab.deeplab`, `~/Documents/DeepLab`, `.deeplab/`), with the runtime swapped to the DeepSeek Harness: frontend typecheck + full unit suite (1018 tests) pass and a live dsh-sidecar smoke test connects DshRuntime end to end.
