@@ -1,0 +1,12 @@
+{
+  "name": "dsh-acp-runtime",
+  "private": true,
+  "version": "0.1.0-rc.6",
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/dsh-acp-demo": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm-deepseek": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-projection": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-token-meter": "0.1.0-rc.6"
+  }
+}

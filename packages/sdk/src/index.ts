@@ -1,0 +1,41 @@
+export { OpenCodeClient, ApiError, isApiStatus } from "./OpenCodeClient";
+export { DshRuntime } from "./dsh/DshRuntime";
+export { DshApiClient, DshRpcError } from "./dsh/DshApiClient";
+export type { DshRuntimeOptions } from "./dsh/DshRuntime";
+export type { AgentRuntime } from "./runtime";
+export { BaseAgentRuntime } from "./base-runtime";
+export {
+  DSH_VERSION,
+  DEFAULT_DSH_URL,
+  type OpenCodeEvent,
+  type TextUpdatedEvent,
+  type ToolUpdatedEvent,
+  type SessionIdleEvent,
+  type RuntimeErrorEvent,
+  type OpenCodeClientOptions,
+  type RuntimeStatus,
+  type ToolCallStatus,
+  type SessionMeta,
+  type SessionQuery,
+  type SessionPage,
+  type SkillInfo,
+  type AgentInfo,
+  type CommandInfo,
+  type HistoryMessage,
+  type ProviderInfo,
+  type ProviderModelInfo,
+  type ProviderAuthMethod,
+  type ProviderCatalogEntry,
+  type AuthPrompt,
+  type OAuthAuthorization,
+  type McpConfig,
+  type McpServer,
+  type QuestionOption,
+  type QuestionItem,
+  type QuestionAskedEvent,
+  type QuestionResolvedEvent,
+  type PermissionAskedEvent,
+  type PermissionResolvedEvent,
+  type PermissionReply,
+  type PromptFile,
+} from "./types";

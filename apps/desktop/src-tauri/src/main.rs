@@ -1,0 +1,15 @@
+// Prevents an extra console window on Windows in release.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {
+    let mut args = std::env::args_os();
+    let _executable = args.next();
+    if args.next().as_deref()
+        == Some(std::ffi::OsStr::new(
+            deeplab_workbench_lib::browser_mcp_proxy::PROXY_FLAG,
+        ))
+    {
+        std::process::exit(deeplab_workbench_lib::browser_mcp_proxy::run(args.collect()));
+    }
+    deeplab_workbench_lib::run()
+}

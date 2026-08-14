@@ -1,0 +1,54 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { WORKFLOW_STARTERS, WorkflowStarters } from "./WorkflowStarters";
+
+describe("WorkflowStarters", () => {
+  it("renders one card per starter workflow", () => {
+    render(<WorkflowStarters onPick={() => {}} />);
+    // Titles are i18n-translated (session:starters.<id>.title); WORKFLOW_STARTERS
+    // itself no longer carries display copy, only ids/prompts — assert the
+    // rendered English text directly.
+    expect(screen.getByText("Build a bioinformatics tool")).toBeInTheDocument();
+    expect(screen.getByText("New browser action")).toBeInTheDocument();
+    expect(screen.getByText("Build a phylogenetic tree")).toBeInTheDocument();
+    expect(screen.getByText("Clean conversation")).toBeInTheDocument();
+    expect(WORKFLOW_STARTERS).toHaveLength(4);
+  });
+
+  it("sends the build-a-bioinformatics-tool prompt on click", async () => {
+    const onPick = vi.fn();
+    render(<WorkflowStarters onPick={onPick} />);
+    await userEvent.click(screen.getByText("Build a bioinformatics tool"));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toContain("生物信息学");
+    expect(onPick.mock.calls[0][0]).toContain("工作区内的文献");
+  });
+
+  it("sends the browser prompt on click", async () => {
+    const onPick = vi.fn();
+    render(<WorkflowStarters onPick={onPick} />);
+    await userEvent.click(screen.getByText("New browser action"));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toContain("浏览器");
+    expect(onPick.mock.calls[0][0]).toContain("待命");
+  });
+
+  it("sends the phylo prompt and asks the user to provide the sequence file", async () => {
+    const onPick = vi.fn();
+    render(<WorkflowStarters onPick={onPick} />);
+    await userEvent.click(screen.getByText("Build a phylogenetic tree"));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toContain("系统发育树");
+    expect(onPick.mock.calls[0][0]).toContain("询问");
+  });
+
+  it("clean conversation opens a blank session: no prompt sent, onBlank fired", async () => {
+    const onPick = vi.fn();
+    const onBlank = vi.fn();
+    render(<WorkflowStarters onPick={onPick} onBlank={onBlank} />);
+    await userEvent.click(screen.getByText("Clean conversation"));
+    expect(onBlank).toHaveBeenCalledTimes(1);
+    expect(onPick).not.toHaveBeenCalled();
+  });
+});

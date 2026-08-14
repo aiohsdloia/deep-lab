@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "screen-window",
+  "description": "A screen detached into its own window (drag a screen tab out). Same baseline as the main window minus the runtime-notification permission — overlay-titlebar window moving and in-app zoom included.",
+  "windows": ["screen-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-theme",
+    "core:window:allow-set-title",
+    "core:webview:allow-set-webview-zoom",
+    "clipboard-manager:allow-write-text"
+  ]
+}

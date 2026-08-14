@@ -1,0 +1,433 @@
+{
+  "notFound": {
+    "title": "Session not found",
+    "hint": "Pick a session from the sidebar."
+  },
+  "group": {
+    "defaultName": "Screen {{n}}",
+    "newTab": "New screen",
+    "close": "Close screen",
+    "renameHint": "Double-click to rename",
+    "splitRight": "Split right — open a new session beside this one",
+    "splitDown": "Split down — open a new session below this one",
+    "closePane": "Close this pane",
+    "confirmClose": {
+      "title": "Close this panel?",
+      "body": "This only removes the panel from this Screen. The session, conversation history, and workspace files are kept.",
+      "action": "Close panel"
+    },
+    "confirmCloseScreen": {
+      "title": "Close this Screen?",
+      "body": "This removes the Screen and every panel in it. Sessions, conversation history, and workspace files are kept.",
+      "action": "Close Screen"
+    },
+    "zoom": "Zoom this pane",
+    "empty": {
+      "title": "Empty screen",
+      "hint": "Drag a session from the sidebar here to start, or press ⌘D to split.",
+      "newSession": "New session"
+    },
+    "rename": "Rename screen",
+    "moveToWindow": "Move to new window",
+    "tabMenu": "Screen actions"
+  },
+  "composer": {
+    "placeholder": {
+      "default": "Ask anything",
+      "arguments": "Arguments (optional) — Enter to run",
+      "shell": "Run a shell command in the workspace folder",
+      "plan": "Describe what to plan — no files will be changed"
+    },
+    "commandsAria": "Commands",
+    "source": {
+      "skill": "skill",
+      "mcp": "mcp"
+    },
+    "file": {
+      "removeAria": "Remove {{name}}"
+    },
+    "attach": {
+      "addAria": "Add files",
+      "title": "Add local files to the workspace"
+    },
+    "command": {
+      "chipTitle": "Runs this command — type arguments, or press Backspace to edit the name",
+      "removeAria": "Remove command"
+    },
+    "shellMode": {
+      "badge": "shell",
+      "title": "Runs directly in the session's workspace folder"
+    },
+    "stop": {
+      "aria": "Stop",
+      "title": "Interrupt this turn (Esc)"
+    },
+    "send": {
+      "aria": "Send"
+    },
+    "queue": {
+      "enqueueAria": "Add to queue",
+      "enqueueTitle": "Run after this turn completes",
+      "viewAria": "View queue",
+      "viewTitle": "View or edit this session's queue"
+    },
+    "agent": {
+      "aria": "Agent mode",
+      "title": "Plan first or build right away",
+      "menuAria": "Agent modes",
+      "menuTitle": "How should the agent work?",
+      "build": {
+        "label": "Build",
+        "description": "Edits files and runs commands"
+      },
+      "plan": {
+        "label": "Plan",
+        "description": "Read-only: researches and writes a plan file first"
+      }
+    },
+    "approval": {
+      "aria": "Approval mode",
+      "title": "How agent actions get approved",
+      "menuAria": "Approval modes",
+      "menuTitle": "How should agent actions be approved?",
+      "approve": {
+        "label": "Approve for me",
+        "description": "Asks before deleting, installing, or going remote"
+      },
+      "full": {
+        "label": "Full access",
+        "description": "Runs every command without asking"
+      }
+    },
+    "error": {
+      "paste": "Could not save paste: {{message}}",
+      "addFiles": "Could not add files: {{message}}"
+    },
+    "model": {
+      "aria": "Switch model",
+      "title": "Model & reasoning effort",
+      "search": "Search models…",
+      "none": "Select model",
+      "empty": "No models yet. Connect a provider.",
+      "noResults": "No matching models",
+      "favorite": "Favorite",
+      "manage": "Manage providers…",
+      "close": "Close",
+      "filter": {
+        "all": "All",
+        "favorites": "Favorites",
+        "recent": "Recent"
+      },
+      "reasoning": "Reasoning effort",
+      "reasoningDefault": "Model default",
+      "faster": "Faster",
+      "smarter": "Smarter",
+      "followingAgent": "Following the {{agent}} agent",
+      "followAgent": "Follow the {{agent}} agent",
+      "useDefault": "Use the global default"
+    },
+    "reference": {
+      "filesAria": "Workspace files",
+      "sessionsAria": "Past conversations",
+      "scanning": "Reading the workspace…",
+      "chipTitle": "This conversation will be quoted for the agent",
+      "removeAria": "Remove the reference to {{title}}"
+    }
+  },
+  "localCommand": {
+    "newDescription": "Clear chat context in this folder",
+    "clearDescription": "Same as /new; files stay in this folder",
+    "cleared": "Chat context cleared. Files stay in the same folder."
+  },
+  "starters": {
+    "newSession": "New session",
+    "heading": "What should we look into?",
+    "subheading": "Describe your analysis below — or start from one of these.",
+    "build-bio-tool": {
+      "title": "Build a bioinformatics tool",
+      "description": "Build a small, self-contained bioinformatics software end to end in this workspace."
+    },
+    "browser": {
+      "title": "New browser action",
+      "description": "Ask the agent to open a browser and process data from web pages."
+    },
+    "phylo-tree": {
+      "title": "Build a phylogenetic tree",
+      "description": "Align, infer, and visualize a phylogenetic tree from sequences."
+    },
+    "clean": {
+      "title": "Clean conversation",
+      "description": "No preset roles, skills, or instructions — a completely plain chat."
+    }
+  },
+  "clean": {
+    "entered": "Entered a clean environment — nothing preset, start typing."
+  },
+  "live": {
+    "runtime": {
+      "title": "OpenCode runtime",
+      "bodyPrefix": "The desktop app runs a bundled OpenCode automatically. In the browser, start one with",
+      "bodySuffix": " and connect."
+    },
+    "connect": "Connect",
+    "latest": "Latest",
+    "subagentFallback": "a subagent",
+    "header": {
+      "expandSidebarAria": "Expand sidebar",
+      "expandSidebarTitle": "Expand sidebar ({{shortcut}})"
+    },
+    "filesToggle": {
+      "default": "Files",
+      "title": "Browse this session's folder beside the chat"
+    },
+    "runsToggle": {
+      "label": "Runs",
+      "title": "This session's experiment runs — beside the chat"
+    },
+    "openFolder": {
+      "title": "Open folder in terminal or VS Code",
+      "terminal": "Open in Terminal",
+      "vscode": "Open in VS Code"
+    },
+    "notebook": {
+      "chooseTitle": "Choose a notebook",
+      "openTitle": "Open {{path}} — the agent works on this notebook in this session"
+    },
+    "connBadge": {
+      "title": "OpenCode · {{status}}",
+      "status": {
+        "ready": "ready",
+        "connecting": "connecting",
+        "error": "error",
+        "offline": "offline"
+      }
+    },
+    "status": {
+      "paused": "Paused — the agent needs your answer below",
+      "startingSession": "Starting the session in its folder…",
+      "retrying": "Provider error — retrying (attempt {{attempt}})",
+      "working": "Working…",
+      "step": "step {{count}}"
+    },
+    "review": {
+      "queued": "Background review queued…",
+      "running": "Reviewing this checkpoint in the background…",
+      "cancelAria": "Stop background review",
+      "cancelTitle": "Stop this review"
+    },
+    "placeholder": {
+      "disconnected": "Connect to chat",
+      "waiting": "Waiting for the reply…",
+      "readOnly": "Read-only access — viewing only"
+    }
+  },
+  "tool": {
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "waiting-approval": "Waiting",
+      "success": "Success",
+      "warning": "Warning",
+      "failed": "Failed"
+    },
+    "verb": {
+      "Ran": "Ran",
+      "Created": "Created",
+      "Edited": "Edited",
+      "Read": "Read",
+      "Searched": "Searched",
+      "Listed": "Listed",
+      "Fetched": "Fetched"
+    },
+    "group": {
+      "phrase": {
+        "ran_one": "ran a command",
+        "ran_other": "ran {{count}} commands",
+        "created_one": "created a file",
+        "created_other": "created {{count}} files",
+        "edited_one": "edited a file",
+        "edited_other": "edited {{count}} files",
+        "read_one": "read a file",
+        "read_other": "read {{count}} files",
+        "searched_one": "ran a search",
+        "searched_other": "ran {{count}} searches",
+        "listed": "listed files",
+        "fetched_one": "fetched a page",
+        "fetched_other": "fetched {{count}} pages",
+        "default_one": "ran a step",
+        "default_other": "ran {{count}} steps"
+      },
+      "failedCount": "{{count}} failed"
+    }
+  },
+  "artifact": {
+    "kind": {
+      "figure": "figure",
+      "script": "script",
+      "report": "report",
+      "table": "table",
+      "notebook": "notebook",
+      "model": "model",
+      "data": "data"
+    },
+    "via": "· via {{tool}}",
+    "open": "Open",
+    "locate": "Locate",
+    "locateTitle": "Locate in file browser"
+  },
+  "figure": {
+    "downloadAria": "Download figure",
+    "addAnnotationAria": "Add annotation",
+    "annotationAria": "Annotation {{index}}: {{note}}",
+    "notePlaceholder": "Add a note…",
+    "noteAria": "Annotation note",
+    "send": "Send"
+  },
+  "reviewer": {
+    "heading": "Reviewer",
+    "badge": {
+      "warn": "Warn",
+      "ok": "OK",
+      "error": "Error"
+    },
+    "checkTag": {
+      "citation": "citation",
+      "number": "number",
+      "figure": "figure ↔ code",
+      "domain": "domain",
+      "integrity": "integrity"
+    },
+    "findingCount_one": "· {{count}} finding",
+    "findingCount_other": "· {{count}} findings",
+    "dismissedCount": "· {{count}} dismissed",
+    "dismissAria": "Dismiss finding: {{title}}",
+    "dismissTitle": "Dismiss this finding",
+    "allDismissed": "All findings dismissed."
+  },
+  "interaction": {
+    "question": {
+      "heading": "The agent needs your input",
+      "customPlaceholder": "Or type your own answer…",
+      "customAria": "Your answer",
+      "other": "Something else…"
+    },
+    "permission": {
+      "heading": "The agent asks permission:"
+    },
+    "askedBy": "Asked by {{origin}}",
+    "skip": "Skip",
+    "submit": "Submit",
+    "reject": "Reject",
+    "alwaysAllow": "Always allow",
+    "allowOnce": "Allow once"
+  },
+  "queue": {
+    "title": "Queue",
+    "count": "{{count}} items",
+    "clear": "Clear",
+    "add": "Add",
+    "empty": "No queued prompts. Add one from the composer, or type below.",
+    "hint": "Runs in order after each turn completes. Set a run plan to delay an item, and a repeat count to run it multiple times.",
+    "itemPlaceholder": "Prompt…",
+    "removeAria": "Remove this queued prompt",
+    "removeTitle": "Remove",
+    "closeAria": "Close queue",
+    "closeTitle": "Close (Esc)",
+    "runPlan": "Run plan",
+    "runPlanAria": "Delay before this queued prompt starts",
+    "delay": {
+      "0": "Now",
+      "5": "In 5 min",
+      "10": "In 10 min",
+      "30": "In 30 min",
+      "60": "In 1 h"
+    },
+    "repeats": "Repeat",
+    "repeatsAria": "How many times to run this prompt",
+    "repeatsTitle": "Run this prompt {{max}} times at most"
+  },
+  "reasoning": {
+    "thinking": "Thinking…",
+    "thought": "Thought"
+  },
+  "stepSummary": {
+    "steps": "{{count}} steps"
+  },
+  "thread": {
+    "exampleBadge": "Example · read-only",
+    "sampleNotice": "This is a sample session. Start a live agent session to chat for real.",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
+  "workspaceChip": {
+    "fallbackName": "Workspace",
+    "titlePinned": "{{workspace}} — click to choose a different folder",
+    "titleUnpinned": "Starts in a new dated folder ({{name}}) — click to choose a folder instead",
+    "chooseAria": "Choose session folder",
+    "switching": "Switching…"
+  },
+  "agentMessage": {
+    "previewTitle": "Preview {{path}}"
+  },
+  "goal": {
+    "label": "Goal",
+    "running": "running",
+    "runningTurns": "auto-turn {{count}}",
+    "paused": "paused",
+    "done": "done",
+    "pauseAria": "Pause the goal (stops auto-continuation)",
+    "resumeAria": "Resume the goal",
+    "clearAria": "Clear the goal",
+    "unmet": "blocked",
+    "limited": "limit reached"
+  },
+  "message": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Could not copy to the clipboard.",
+    "edit": "Edit",
+    "editing": {
+      "cancel": "Cancel",
+      "send": "Send"
+    },
+    "revert": "Revert",
+    "confirm": {
+      "title": "Discard everything after this?",
+      "body": "This rolls the conversation back to this message and discards it and every message after it, along with the file changes those turns made. This can't be undone.",
+      "edit": "Edit & resend",
+      "revert": "Revert here"
+    }
+  },
+  "compaction": {
+    "label": "Context compacted",
+    "autoBody": "The runtime summarized the earlier turns to stay inside this model's context window, and the conversation continued here.",
+    "manualBody": "You asked the runtime to summarize the earlier turns; the conversation continued here.",
+    "overflowBody": "It happened because the context had already filled up.",
+    "at": "When: {{time}}",
+    "originalKept": "The full original conversation is still stored locally."
+  },
+  "selection": {
+    "aria": "Actions for the selected text",
+    "quote": "Quote",
+    "explain": "Explain",
+    "explainPrompt": "Explain this part in more detail.",
+    "remember": "Save to memory",
+    "savedProject": "Saved to {{name}}'s memory",
+    "savedGlobal": "Saved to global memory"
+  },
+  "subagents": {
+    "title": "Subagents",
+    "toggleTitle": "Show what the subagents are doing",
+    "closeAria": "Close the subagent panel",
+    "count_one": "{{count}} task",
+    "count_other": "{{count}} tasks",
+    "empty": "No subagents in this conversation yet.",
+    "noDetail": "No steps were recorded for this subagent.",
+    "loadingDetail": "Loading…"
+  },
+  "questionHistory": {
+    "open": "View the questions asked in this session",
+    "searchPlaceholder": "Search questions…",
+    "empty": "No questions yet"
+  }
+}

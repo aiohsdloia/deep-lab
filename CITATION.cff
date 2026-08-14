@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use DeepLab in your research, please cite it as below."
+title: "DeepLab: a local-first, model-agnostic AI research workbench powered by the DeepSeek Harness"
+type: software
+authors:
+  - name: "The DeepLab Contributors"
+license: MIT
+version: 1.0.2
+keywords:
+  - AI for science
+  - research workbench
+  - AI agents
+  - reproducibility
+  - local-first
+  - DeepSeek Harness
+  - desktop application

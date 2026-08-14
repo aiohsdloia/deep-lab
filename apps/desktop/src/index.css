@@ -1,0 +1,490 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/source-serif-4/400.css";
+@import "@fontsource/source-serif-4/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Webview page-zoom factor (Cmd/Ctrl +/-), owned by ZoomProvider. The macOS
+   traffic lights are native chrome and never zoom, so titlebar strips counter-
+   scale their height and traffic-light inset by 1/--zoom (see overlayTitlebarStyle)
+   to stay pinned to the lights at every zoom level. */
+:root {
+  --zoom: 1;
+}
+
+/* Warm — refined modern paper: a soft warm-neutral page with white cards and a
+   deep terracotta accent. The default paper theme. */
+:root,
+[data-theme="warm"] {
+  --bg: #faf9f6;
+  --surface: #ffffff;
+  --surface-2: #f4f2ec;
+  --border: #e8e5dc;
+  --border-faint: #f0eee7;
+  --text: #26241f;
+  --muted: #8a8579;
+  --accent: #b3452f;
+  --accent-fg: #ffffff;
+  --link: #2a6fdb;
+  --warn: #c98a2b;
+  --ok: #3f9d63;
+  --error: #c25c4e;
+  /* Chart design system (P1-5) — validated categorical hues + chart chrome,
+     the single source of truth shared with @ai4s/shared and the matplotlib
+     style. Light surface = --surface (#ffffff). */
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #eda100;
+  --series-4: #008300;
+  --series-5: #4a3aa7;
+  --series-6: #e34948;
+  --series-7: #e87ba4;
+  --series-8: #eb6834;
+  --chart-grid: #e7e3da;
+  --chart-axis: #cbc6bb;
+  /* Code highlighting (GitHub-light hues; see .hljs-* rules below). */
+  --hl-keyword: #cf222e;
+  --hl-entity: #8250df;
+  --hl-constant: #0550ae;
+  --hl-string: #0a3069;
+  --hl-builtin: #953800;
+  --hl-comment: #6e7781;
+  --hl-tag: #116329;
+  --hl-addition: #116329;
+  --hl-addition-bg: #dafbe1;
+  --hl-deletion: #82071e;
+  --hl-deletion-bg: #ffebe9;
+}
+
+/* Light — the default: a modern, airy neutral. A cool off-white page lifts the
+   white surfaces into real elevation contrast (the old theme had both pure
+   white), with a contemporary indigo accent. */
+[data-theme="light"] {
+  --bg: #f6f7fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f8;
+  --border: #e3e7ef;
+  --border-faint: #eef1f7;
+  --text: #1a1d26;
+  --muted: #6f768a;
+  --accent: #4f5ce8;
+  --accent-fg: #ffffff;
+  --link: #3a63e0;
+  --warn: #c98a2b;
+  --ok: #3f9d63;
+  --error: #d0554a;
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #eda100;
+  --series-4: #008300;
+  --series-5: #4a3aa7;
+  --series-6: #e34948;
+  --series-7: #e87ba4;
+  --series-8: #eb6834;
+  --chart-grid: #e3e7ef;
+  --chart-axis: #c6cbd8;
+  /* Code highlighting (GitHub-light hues; see .hljs-* rules below). */
+  --hl-keyword: #cf222e;
+  --hl-entity: #8250df;
+  --hl-constant: #0550ae;
+  --hl-string: #0a3069;
+  --hl-builtin: #953800;
+  --hl-comment: #6e7781;
+  --hl-tag: #116329;
+  --hl-addition: #116329;
+  --hl-addition-bg: #dafbe1;
+  --hl-deletion: #82071e;
+  --hl-deletion-bg: #ffebe9;
+}
+
+/* Dark — a modern elevated dark (near-black page, raised surfaces), with a
+   bright indigo accent and dark text on filled accent for contrast. */
+[data-theme="dark"] {
+  --bg: #0d0e13;
+  --surface: #17181f;
+  --surface-2: #1f212b;
+  --border: #2a2d39;
+  --border-faint: #20222c;
+  --text: #e9ebf2;
+  --muted: #969cb0;
+  --accent: #7d7ff0;
+  --accent-fg: #0d0e13;
+  --link: #8ea0f6;
+  --warn: #d7a24a;
+  --ok: #5fb87e;
+  --error: #e07a70;
+  /* Same hues stepped for the dark chart surface (--surface #17181f). */
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #c98500;
+  --series-4: #008300;
+  --series-5: #9085e9;
+  --series-6: #e66767;
+  --series-7: #d55181;
+  --series-8: #d95926;
+  --chart-grid: #2a2d39;
+  --chart-axis: #4a4d5c;
+  /* Code highlighting (GitHub-dark hues; see .hljs-* rules below). */
+  --hl-keyword: #ff7b72;
+  --hl-entity: #d2a8ff;
+  --hl-constant: #79c0ff;
+  --hl-string: #a5d6ff;
+  --hl-builtin: #ffa657;
+  --hl-comment: #9198a1;
+  --hl-tag: #7ee787;
+  --hl-addition: #aff5b4;
+  --hl-addition-bg: rgba(46, 160, 67, 0.18);
+  --hl-deletion: #ffdcd7;
+  --hl-deletion-bg: rgba(248, 81, 73, 0.18);
+}
+
+/* 墨水屏 (E-ink) — pure black/white/grey, maximum contrast, no color and no
+   translucency. Built for e-ink displays (usually reached through the
+   web/gateway client, which defaults to it). Charts fall back to a grey ramp;
+   semantic states (ok/warn/error) are distinguished by shade, not hue. */
+[data-theme="eink"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --border: #9a9a9a;
+  --border-faint: #cccccc;
+  --text: #000000;
+  --muted: #555555;
+  --accent: #000000;
+  --accent-fg: #ffffff;
+  --link: #000000;
+  --warn: #666666;
+  --ok: #333333;
+  --error: #000000;
+  --series-1: #1a1a1a;
+  --series-2: #333333;
+  --series-3: #4d4d4d;
+  --series-4: #666666;
+  --series-5: #808080;
+  --series-6: #999999;
+  --series-7: #b3b3b3;
+  --series-8: #cccccc;
+  --chart-grid: #d9d9d9;
+  --chart-axis: #b3b3b3;
+  --hl-keyword: #000000;
+  --hl-entity: #000000;
+  --hl-constant: #000000;
+  --hl-string: #000000;
+  --hl-builtin: #000000;
+  --hl-comment: #777777;
+  --hl-tag: #000000;
+  --hl-addition: #000000;
+  --hl-addition-bg: #eeeeee;
+  --hl-deletion: #000000;
+  --hl-deletion-bg: #eeeeee;
+}
+/* E-ink: no accent glow, no vibrancy translucency, no backdrop blur — solid
+   ink-on-paper everywhere (also lighter on a low-power e-ink display). */
+[data-theme="eink"] body {
+  background-image: none;
+}
+[data-theme="eink"] [data-vibrancy] .sidebar-surface {
+  background: var(--surface);
+}
+[data-theme="eink"] ::selection {
+  background: #dddddd;
+  color: #000000;
+}
+[data-theme="eink"] *,
+[data-theme="eink"] *::before,
+[data-theme="eink"] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* This is app chrome, not a document: the window itself must never scroll or
+   rubber-band. Without this, dragging anywhere — including the sidebar, the
+   Screen tabs and a pane header, none of which scroll — bounced the whole
+   window a few points and sprang back, so fixed furniture did not feel fixed. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* A real scroller reaching its end must not hand the leftover gesture to its
+   ancestors (which is what made the window bounce from inside a list). Keyed to
+   the utility classes the app actually scrolls with. */
+.overflow-y-auto,
+.overflow-auto,
+.overflow-x-auto {
+  overscroll-behavior: contain;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* A faint accent-tinted glow behind the workspace — modern, and the
+     translucent sidebar lets it breathe on macOS vibrancy. */
+  background-image: radial-gradient(
+    1100px 520px at 18% -8%,
+    color-mix(in srgb, var(--accent) 5%, transparent),
+    transparent
+  );
+}
+
+/* Modern selection: a soft accent wash instead of the system blue. */
+::selection {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text);
+}
+
+/* A subagent's transcript is a NESTED, secondary read inside a narrow panel.
+   The thread's own type scale (15px body) is sized for the main conversation
+   and overwhelms it there. The block components set their sizes explicitly, so
+   the step down is applied once here rather than threaded as a prop through
+   every one of them. */
+.nested-transcript,
+.nested-transcript p,
+.nested-transcript li {
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Sidebar icon weight. lucide ships stroke-width 2, which next to the 1.5 of the
+   collapse button read thick and slightly fuzzy at these sizes. One rule instead
+   of a prop on every call site, so an icon added later matches by default.
+   (A CSS stroke-width beats the presentation attribute lucide sets inline.) */
+.sidebar-surface svg {
+  stroke-width: 1.5;
+}
+
+/* Sidebar background. With window vibrancy (macOS desktop app, data-vibrancy
+   set by ThemeProvider) the page under the sidebar goes transparent and the
+   sidebar turns slightly translucent, letting the blurred desktop tint
+   through; everywhere else it stays an opaque surface. */
+.sidebar-surface {
+  background: var(--surface);
+}
+[data-vibrancy] body {
+  background: transparent;
+}
+/* The translucent tint uses the theme's own --bg (not the white surface) so
+   the sidebar stays warm in warm and dark in dark. The vibrancy material
+   itself follows the in-app theme via setWindowTheme (needs the
+   core:window:allow-set-theme capability). */
+[data-vibrancy] .sidebar-surface {
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+[data-vibrancy][data-theme="dark"] .sidebar-surface {
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+}
+
+/* Native <select> chrome (metallic bezel + arrow) clashes with the flat
+   inputs; draw our own chevron instead. Pair with inputCls via selectCls. */
+.select-chrome {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23898989' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 14px;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+/* Thin, calm scrollbars to match the paper aesthetic. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* Horizontal scroll rows (e.g. the model picker's filter chips) where a visible
+   scrollbar would eat row height and clip the content. Still scrolls by drag/wheel. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* One-shot attention pulse for the reasoning-effort slider when a model that
+   supports it is picked — so it's clear where the effort control is. */
+@keyframes effort-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 157, 255, 0);
+  }
+  35%,
+  65% {
+    box-shadow: 0 0 0 3px rgba(76, 157, 255, 0.7);
+  }
+}
+.animate-effort-flash {
+  animation: effort-flash 0.6s ease-in-out 2;
+}
+
+/* highlight.js token colors on the per-theme --hl-* variables (CodeViewer).
+   Grouping mirrors highlight.js's github/github-dark themes so every language
+   grammar maps the same way; a bundled stylesheet would hardcode one theme. */
+.hljs {
+  color: var(--text);
+  background: transparent;
+}
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  color: var(--hl-keyword);
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  color: var(--hl-entity);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-variable {
+  color: var(--hl-constant);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-meta .hljs-string {
+  color: var(--hl-string);
+}
+.hljs-built_in,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--hl-builtin);
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  color: var(--hl-comment);
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  color: var(--hl-tag);
+}
+.hljs-subst {
+  color: var(--text);
+}
+.hljs-section {
+  color: var(--hl-constant);
+  font-weight: 600;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+.hljs-addition {
+  color: var(--hl-addition);
+  background-color: var(--hl-addition-bg);
+}
+.hljs-deletion {
+  color: var(--hl-deletion);
+  background-color: var(--hl-deletion-bg);
+}
+
+/* Sidebar expand button appears after the collapse animation settles. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fade-in {
+  animation: fade-in 150ms ease-out 150ms backwards;
+}
+
+/* App chrome is not a document. Right-clicking a sidebar row or a Screen tab
+   used to select its label (WebKit selects the word under the cursor before
+   opening its menu), leaving stray highlight behind. Chrome opts out of
+   selection via `select-none`; editable fields always opt back IN, since a
+   `user-select:none` ancestor would otherwise make their own text unselectable. */
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* While a pane is being dragged (see lib/dragPane), forcefully suppress text
+   selection everywhere — the conversation's message text sets its own
+   `user-select`, which a body-level `user-select:none` can't override. */
+.pane-dragging,
+.pane-dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: grabbing !important;
+}
+
+/* Long conversations: every message/tool block is wrapped in .thread-block so
+   offscreen blocks skip layout + paint (content-visibility: auto). The
+   compositor's layer tree then only contains visible blocks, so rendering cost
+   stays constant no matter how long the thread is (a 10k-block conversation
+   lays out like a ~20-block one). contain-intrinsic-size keeps the scrollbar
+   and scroll-anchoring stable while a block is skipped. Unsupported WebKit
+   versions simply ignore the property (progressive enhancement). */
+.thread-block {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
+/* Brief accent flash on a conversation block after the user jumps to it from
+   the question-history — one short animation, then the highlight fades. */
+@keyframes block-highlight {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+    background: color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+    background: color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+.block-highlight {
+  animation: block-highlight 1.6s ease-out 1;
+}
