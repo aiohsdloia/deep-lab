@@ -3196,7 +3196,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         await get().connectRetry();
         return;
       }
-      if (!isTauri) return;
+      // Plain-browser dev (`pnpm dev`, no Tauri): vite proxies the same-origin
+      // `/api` prefix to the dsh sidecar (see vite.config.ts server.proxy), so
+      // the app talks to the same origin and the browser-trust fence passes.
+      if (!isTauri) {
+        set({ serverUrl: window.location.origin });
+        await get().connectRetry();
+        return;
+      }
       void logDebug("bootstrap: starting bundled runtime");
       try {
         const url = await startRuntime();

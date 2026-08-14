@@ -194,7 +194,7 @@
       "openTitle": "Open {{path}} — the agent works on this notebook in this session"
     },
     "connBadge": {
-      "title": "OpenCode · {{status}}",
+      "title": "DeepSeek Harness · {{status}}",
       "status": {
         "ready": "ready",
         "connecting": "connecting",
