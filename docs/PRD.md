@@ -9,7 +9,7 @@
 
 **DeepLab** is an open-source AI research workbench with macOS / Windows / Linux
 installers, positioned as an **open-source alternative to Claude Science style
-products**. It reproduces Open Lab's functionality with the DeepSeek Harness
+products**. It ships a self-contained research environment on the DeepSeek Harness
 (dsh) as the agent runtime.
 
 It is not an ordinary paper-summarization tool. It is a local-first, model-agnostic,

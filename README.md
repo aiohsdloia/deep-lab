@@ -5,13 +5,12 @@
 **Local-first, model-agnostic AI research workbench for macOS, Windows & Linux — powered by the DeepSeek Harness (dsh) agent runtime.**
 
 DeepLab is an open-source desktop alternative to Claude Science and similar
-AI-for-science workbenches. It reproduces the functionality of
-[Open Lab](https://gitee.com/sculab/openscience) — projects, sessions,
-provenance, runs, review skills, viewers, notebooks, remote compute, and a
-token-authenticated gateway — but replaces the agent runtime with the
-**DeepSeek Harness**: `dsh --profile web` runs as a bundled sidecar and the UI
-talks to it through the dsh `/api` HTTP+WebSocket gateway (the dsh client
-framework), instead of an OpenCode sidecar.
+AI-for-science workbenches. It is a self-contained research environment:
+projects, sessions, provenance, runs, review skills, viewers, notebooks,
+remote compute, and a token-authenticated gateway — all driven by the
+**DeepSeek Harness** as the single agent runtime. `dsh --profile web` runs as a
+bundled sidecar and the UI talks to it through the dsh `/api` HTTP+WebSocket
+gateway (the dsh client framework).
 
 <p>
   <b>English</b>
@@ -74,21 +73,25 @@ in one continuous, auditable session.
 | Models | dsh's provider catalog (settings/credentials/llm domains). |
 | Interface languages | English and Simplified Chinese. |
 
-## Runtime swap: OpenCode → DeepSeek Harness
+## Architecture
 
-The defining difference from Open Lab is the agent runtime:
+DeepLab's agent runtime is the DeepSeek Harness, an open-source plugin-based
+agent harness. The app bundles a pinned dsh sidecar and speaks the dsh client
+framework's native wire protocol end to end:
 
-| | Open Lab | DeepLab |
-| --- | --- | --- |
-| Sidecar | `opencode serve` binary | `dsh --profile web` (Node CLI via `runtime/dsh/launcher.mjs`) |
-| Transport | OpenCode HTTP + SSE | dsh `/api` HTTP POST unary + `/api/events.mux` `/api/events.host` WebSocket downlinks |
-| SDK | `OpenCodeClient` | `DshRuntime` (same `AgentRuntime` seam; `OpenCodeClient` retained as reference) |
-| Sessions | OpenCode session/message | dsh `session.*` RPC + session-log event folding |
-| Skills | `<xdg>/opencode/skills/` | `<dsh-home>/skills/` + workspace `.dsh/skills/` |
-| Providers/MCP | OpenCode config API | dsh `llm.*` / `credentials.*` / `settings.*` (MCP wired in cordis.yml) |
+| Layer | Technology |
+| --- | --- |
+| Sidecar | `dsh --profile web` (Node CLI via `runtime/dsh/launcher.mjs`), spawned by the app with an app-private `DSH_HOME` |
+| Transport | dsh `/api` HTTP POST unary + `/api/events.mux` `/api/events.host` WebSocket downlinks |
+| SDK | `DshRuntime` (the `AgentRuntime` seam) |
+| Sessions | dsh `session.*` RPC + session-log event folding |
+| Skills | `<dsh-home>/skills/` + workspace `.dsh/skills/` |
+| Providers/MCP | dsh `llm.*` / `credentials.*` / `settings.*` (MCP wired in cordis.yml) |
+| Permissions | dsh permission presets — workspace-write by default, danger-full-access "unlimited mode" for full filesystem access |
 
 Everything else — the thread, provenance, runs, projects, review, viewers,
-notebooks, remote compute, and gateway — is runtime-agnostic and unchanged.
+notebooks, remote compute, and gateway — sits above this runtime seam and is
+runtime-agnostic.
 
 ## Build from source
 
@@ -140,16 +143,14 @@ A live smoke test (`apps/desktop/src/test/dsh-live.smoke.test.ts`) connects
 | `runtime/skills/core/` | First-party scientific skills. |
 | `runtime/skills/external/` | Build-fetched external skills. |
 | `runtime/dsh/` | Bundled dsh sidecar (launcher + pinned CLI). |
-| `runtime/dsh-acp/` | Bundled DeepSeek Harness ACP agent. |
 | `docs/` | Product, technical, operator, connector, and research notes. |
 | `scripts/dev/` | Sidecar, `uv`, skill fetchers. |
 
 ## Status
 
-DeepLab is a working desktop MVP derived from Open Lab with the runtime swapped
-to the DeepSeek Harness. The most reliable current implementation log is
-[`PROGRESS.md`](./PROGRESS.md). Known deviations from Open Lab (dsh v1 API gaps)
-are listed there.
+DeepLab is a working desktop app on the DeepSeek Harness runtime. The most
+reliable current implementation log is [`PROGRESS.md`](./PROGRESS.md), which
+also lists dsh v1 API gaps and the dsh-architecture migration backlog.
 
 ## License
 

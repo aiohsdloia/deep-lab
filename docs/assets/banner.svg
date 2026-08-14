@@ -62,6 +62,6 @@
   </g>
 
   <!-- Brand -->
-  <text x="850" y="392" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="600" fill="#ffffff" letter-spacing="1">Open Lab</text>
+  <text x="850" y="392" font-family="Georgia, 'Times New Roman', serif" font-size="104" font-weight="600" fill="#ffffff" letter-spacing="1">DeepLab</text>
   <text x="852" y="452" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="34" fill="#dce7ff" letter-spacing="0.5">Local-first, model-agnostic AI research workbench</text>
 </svg>

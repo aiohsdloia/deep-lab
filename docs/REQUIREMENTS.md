@@ -1,7 +1,7 @@
-# Open Lab — Prioritized Requirements (Community-Informed)
+# DeepLab — Prioritized Requirements (Community-Informed)
 
 > **Purpose.** This document turns real community evidence into concrete,
-> prioritized requirements for **Open Lab**, our open-source, local-first,
+> prioritized requirements for **DeepLab**, our open-source, local-first,
 > reproducible AI research workbench. It complements `PRD.md`: the PRD says
 > *what the product is*; this file says *what to build first and why*, tied to
 > evidence.
@@ -41,11 +41,11 @@ The moat of an AI research workbench is **not the model**. It is:
 4. **domain-correctness gates** — because across *every* field the top complaint
    is code that **runs but is scientifically wrong** (see P0-5).
 
-Open Lab must win on those four axes — plus two things competitors are
+DeepLab must win on those four axes — plus two things competitors are
 criticized for lacking: **multi-discipline breadth** and **Windows support**.
 
 Do **not** market as "open-source Claude Science" or "zero hallucination."
-Market as: *"Open Lab — local-first, model-agnostic AI research
+Market as: *"DeepLab — local-first, model-agnostic AI research
 workbench for macOS, Windows & Linux."* Sell **traceable / verifiable**, not **perfect**.
 
 ---
@@ -302,13 +302,13 @@ competitors.
     freely. Covered by the permission fix above (in "Approve for me" mode;
     "Full access" is an explicit user opt-out).
   - [ ] **API keys are plaintext on disk** — provider keys, connector keys
-    (MP/FRED), and the Jupyter token all land in `opencode.json` (not only the
+    (MP/FRED), and the Jupyter token all land in the app-private dsh config (not only the
     mode-600 `auth.json` P2-3 describes). The keychain revert (P2-3) was a
     deliberate call for signed-release reasons; revisit for signed releases.
     **Both interim minimums are now met (2026-07-06):** the `/global/config`
     surface requires auth (see the CORS/auth fix above), and the config is no
     longer world-readable — the app-private runtime root is chmod 700 and
-    `opencode.jsonc` 600 on every start and after every Rust-side write
+    dsh settings 600 on every start and after every Rust-side write
     (verified: the sidecar's own PATCH rewrite preserves the 600 mode).
     (Verified clean: no keys in provenance/logs/localStorage/git.)
 
@@ -358,7 +358,7 @@ competitors.
 
   **Cleanup — structure (not urgent):**
   - [ ] Split `lib/runtime.ts` (1,014 lines, ~6 concerns): extract the pure
-    fold/history reducers and connection/retry; stop hardcoding `OpenLab/`
+    fold/history reducers and connection/retry; stop hardcoding `DeepLab/`
     in `tidyToolTitle` (`runtime.ts:835`).
   - [ ] Extract ProvidersCard/McpCard from `SettingsPage.tsx` (903 lines, 20
     `useState`, zero tests) following the existing ClusterCard pattern.

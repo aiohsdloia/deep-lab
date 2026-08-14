@@ -65,7 +65,7 @@ binding + auth**. Building five adapters would reinvent the seam five times.
 | Directory listing / file read | ✅ (Tauri IPC today) | `src-tauri/src/artifact_file.rs:385` (`list_dir`) |
 | Loopback HTTP server pattern | ✅ (static file preview) | `src-tauri/src/preview_server.rs` |
 | Per-run auth secret | ✅ (sidecar Basic-auth password) | `src-tauri/src/runtime.rs:438` |
-| Permission engine (allow/ask/deny, last-match-wins) | ✅ | `src-tauri/src/opencode_config.rs:35` |
+| Permission engine (allow/ask/deny, last-match-wins) | ✅ | `src-tauri/src/dsh_config.rs:35` |
 | Cross-session live updates in the desktop | ✅ (events folded by `sessionId`) | `src-tauri`… `apps/desktop/src/lib/runtime.ts:849` |
 
 The **gaps** are small and specific: a network-facing authenticated server, a
@@ -85,7 +85,7 @@ policy engine.
    │                          │                           │
 Gateway server  ───────────►  local runtime          RemoteRuntime (client)
 (authed HTTP+SSE)             (OpenCodeClient →        implements AgentRuntime,
-   ▲   ▲   ▲   ▲               opencode sidecar)        speaks the gateway wire
+   ▲   ▲   ▲   ▲               dsh sidecar)        speaks the gateway wire
    │   │   │   │                                            │
   CLI web tunnel bot                              (the desktop, driving a
                                                    runtime on another machine)

@@ -4,11 +4,10 @@
 
 **本地优先、模型无关的 macOS、Windows & Linux AI 科研工作台 —— 由 DeepSeek Harness (dsh) 智能体运行时驱动。**
 
-DeepLab 是 Claude Science 及同类 AI-for-science 工作台的开源桌面替代。它在功能上完整复现
-[Open Lab](https://gitee.com/sculab/openscience)（项目、会话、溯源、运行记录、审查技能、
-查看器、笔记本、远程计算与网关），但把智能体运行时替换为 **DeepSeek Harness**：
-应用将 `dsh --profile web` 作为内置 sidecar 启动，并通过 dsh 的 `/api`
-HTTP+WebSocket 网关（dsh 客户端框架）与之通信，而不是 OpenCode sidecar。
+DeepLab 是 Claude Science 及同类 AI-for-science 工作台的开源桌面替代，是一个自包含的
+科研环境：项目、会话、溯源、运行记录、审查技能、查看器、笔记本、远程计算与网关，
+全部由 **DeepSeek Harness** 作为唯一智能体运行时驱动。应用将 `dsh --profile web`
+作为内置 sidecar 启动，并通过 dsh 的 `/api` HTTP+WebSocket 网关（dsh 客户端框架）与之通信。
 
 <p>
   <a href="./README.md">English</a> ·
@@ -42,19 +41,23 @@ HTTP+WebSocket 网关（dsh 客户端框架）与之通信，而不是 OpenCode 
 
 ## 运行时替换：OpenCode → DeepSeek Harness
 
-与 Open Lab 的决定性差异是智能体运行时：
+## 架构
 
-| | Open Lab | DeepLab |
-| --- | --- | --- |
-| Sidecar | `opencode serve` 二进制 | `dsh --profile web`（Node CLI，经 `runtime/dsh/launcher.mjs`） |
-| 传输 | OpenCode HTTP + SSE | dsh `/api` HTTP POST 一元调用 + `/api/events.mux` `/api/events.host` WebSocket 下行流 |
-| SDK | `OpenCodeClient` | `DshRuntime`（同一 `AgentRuntime` 缝；`OpenCodeClient` 保留作参考） |
-| 会话 | OpenCode session/message | dsh `session.*` RPC + 会话日志事件折叠 |
-| 技能 | `<xdg>/opencode/skills/` | `<dsh-home>/skills/` + 工作区 `.dsh/skills/` |
-| Provider/MCP | OpenCode 配置 API | dsh `llm.*` / `credentials.*` / `settings.*`（MCP 在 cordis.yml 中配置） |
+DeepLab 的智能体运行时是 DeepSeek Harness —— 一个开源的插件化智能体框架。
+应用捆绑固定版本的 dsh sidecar，并端到端使用 dsh 客户端框架的原生线协议：
+
+| 层 | 技术 |
+| --- | --- |
+| Sidecar | `dsh --profile web`（Node CLI，经 `runtime/dsh/launcher.mjs`），由应用以应用私有 `DSH_HOME` 启动 |
+| 传输 | dsh `/api` HTTP POST 一元调用 + `/api/events.mux` `/api/events.host` WebSocket 下行流 |
+| SDK | `DshRuntime`（`AgentRuntime` 缝） |
+| 会话 | dsh `session.*` RPC + 会话日志事件折叠 |
+| 技能 | `<dsh-home>/skills/` + 工作区 `.dsh/skills/` |
+| Provider/MCP | dsh `llm.*` / `credentials.*` / `settings.*`（MCP 在 cordis.yml 中配置） |
+| 权限 | dsh 权限预设 —— 默认 workspace-write；"无限模式"= danger-full-access 完整文件系统访问 |
 
 其余一切 —— 线程、溯源、运行、项目、审查、查看器、笔记本、远程计算与网关 ——
-都是运行时无关的，保持不变。
+都位于这一运行时缝之上，与运行时无关。
 
 ## 从源码构建
 
@@ -103,15 +106,14 @@ pnpm lint
 | `packages/shared/` | 共享领域类型与图表调色板。 |
 | `runtime/skills/core/` | 一方科学技能。 |
 | `runtime/dsh/` | 捆绑的 dsh sidecar（launcher + 固定版本 CLI）。 |
-| `runtime/dsh-acp/` | 捆绑的 DeepSeek Harness ACP 智能体。 |
 | `docs/` | 产品、技术、运维、连接器与研究笔记。 |
 | `scripts/dev/` | sidecar、`uv`、技能拉取脚本。 |
 
 ## 状态
 
-DeepLab 是一个工作中的桌面 MVP，由 Open Lab 派生并把运行时替换为 DeepSeek Harness。
-最可靠的实现日志是 [`PROGRESS.md`](./PROGRESS.md)；与 Open Lab 的已知差异（dsh v1
-API 缺口）列于其中。
+DeepLab 是一个运行在 DeepSeek Harness 运行时上的桌面应用。
+最可靠的实现日志是 [`PROGRESS.md`](./PROGRESS.md)，其中也列出了 dsh v1 API 缺口与
+dsh 架构迁移待办。
 
 ## 许可
 

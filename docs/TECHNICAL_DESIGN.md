@@ -44,7 +44,7 @@ sidecar's `/api` gateway. Unary calls POST a `ClientRequest` envelope to
 are WebSocket downlinks whose frames are `ServerRequest` envelopes carrying
 `MuxFrame`/`HostFrame`. `DshRuntime` folds dsh `session/event` frames into the
 normalized `OpenCodeEvent` shapes the store already consumed, so the thread,
-provenance, and runs layers are unchanged from Open Lab.
+provenance, and runs layers are runtime-agnostic above the SDK seam.
 
 ## 3. Tauri over Electron
 
