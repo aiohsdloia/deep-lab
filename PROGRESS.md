@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-08-14 22:40` — Desktop build now connects: the bundled dsh sidecar is reached through a same-origin internal gateway (`start_internal` + CORS + a hand-rolled WebSocket upgrade proxy for `/api/events.*`), so the `tauri://localhost` WebView passes dsh's browser-trust fence; verified live (`connect OK`, host+mux streams active end to end).
 - `2026-08-14 21:30` — Simplified DeepLab to dsh-only: removed ACP/OpenCodeClient runtime selection, the runtime settings section, the model browser, and the main-UI model status pill; models are now one DeepSeek API key + a Flash/Pro choice (verified live against dsh's `deepseek-v4-flash`/`deepseek-v4-pro`).
 - `2026-08-14 19:00` — DeepLab scaffolded from open-lab source, rebranded (`@deeplab/*`, `com.sculab.deeplab`, `~/Documents/DeepLab`, `.deeplab/`), with the runtime swapped to the DeepSeek Harness: frontend typecheck + full unit suite (1018 tests) pass and a live dsh-sidecar smoke test connects DshRuntime end to end.
 - `2026-08-14 18:40` — `packages/sdk` implements `DshRuntime` (the `AgentRuntime` seam) over the dsh `/api` HTTP+WebSocket gateway with session-event folding, plus `DshApiClient` transport; provider/MCP surface mapped onto dsh `llm.*`/`credentials.*`/`settings.*`.
@@ -16,6 +17,21 @@ Results and blockers only.
 - OAuth authorize/callback flows — dsh v1 has no OAuth RPC; configure provider credentials in Settings.
 - Per-session model select persists per session (`session.selectModel`) rather than a global default; `setDefaultModel` applies to live sessions.
 - `session.list` is unpaginated in dsh v1; `querySessions` pages in the client.
+
+## Desktop connection model (verified)
+
+The bundled sidecar is loopback-only and dsh's browser-trust fence demands
+`Origin === Host`, but the WebView origin is `tauri://localhost` — so the shell
+never dials the sidecar directly. `start_runtime` spawns dsh, waits for its
+socket, then starts an internal same-origin gateway (`gateway::start_internal`,
+fresh token) and returns the gateway URL. The SDK talks to the gateway:
+`Authorization: Bearer <token>` on unary calls, `?token=` on the WebSocket
+streams, and the gateway proxies `/api` (HTTP) plus `/api/events.*` (a
+hand-written WebSocket upgrade proxy — `tungstenite::accept` cannot be used
+because `Request::parse` already consumed the handshake through its own
+BufReader, so the 101 is written manually and the socket is wrapped with
+`WebSocket::from_raw_socket`). CORS headers on every response let the cross-origin
+WebView fetch succeed (all privileged paths stay token-gated).
 
 ## Retained-but-inactive OpenCode code
 

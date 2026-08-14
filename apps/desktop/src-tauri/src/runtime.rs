@@ -1,10 +1,11 @@
 // Manages the bundled DeepSeek Harness (dsh) sidecar so it never interferes
 // with any dsh the user already has: it runs the bundled CLI, on a *dedicated
 // free port*, with an *app-private* DSH_HOME, and is killed on app exit.
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
 use crate::opencode_config::merge_config;
@@ -12,8 +13,18 @@ use crate::opencode_config::merge_config;
 #[derive(Default)]
 struct RuntimeLifecycle {
     child: Option<std::process::Child>,
+    /// The internal gateway's URL — what the frontend connects to.
     url: Option<String>,
     port: Option<u16>,
+    /// The raw dsh sidecar URL (`http://127.0.0.1:<sidecar-port>`), which the
+    /// gateway proxies to. Distinct from `url` (the gateway URL): `sidecar_url`
+    /// must keep pointing at the sidecar so the gateway's `/api` + WebSocket
+    /// proxies don't dial themselves.
+    sidecar_url: Option<String>,
+    /// Token of the internal same-origin gateway the desktop shell talks to
+    /// (see gateway::start_internal). The WebView cannot reach the loopback
+    /// sidecar cross-origin, so every request carries this token instead.
+    gateway_token: Option<String>,
 }
 
 /// One lock owns every sidecar lifecycle field. Keeping child/url/port in
@@ -34,10 +45,9 @@ pub(crate) fn runtime_root(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// The running sidecar's base URL (`http://127.0.0.1:<port>`), or None when the
-/// runtime is not started yet. The gateway proxies agent calls here, adding the
-/// per-run Basic-auth password (`server_password`) itself.
+/// runtime is not started yet. The gateway proxies agent calls here.
 pub(crate) fn sidecar_url(state: &RuntimeState) -> Option<String> {
-    state.lifecycle.lock().unwrap().url.clone()
+    state.lifecycle.lock().unwrap().sidecar_url.clone()
 }
 
 pub(crate) fn xdg_config_home(app: &AppHandle) -> Result<PathBuf, String> {
@@ -960,21 +970,14 @@ pub(crate) fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Per-run password the sidecar requires on every HTTP request (OpenCode's
-/// built-in Basic auth, `OPENCODE_SERVER_PASSWORD`). Generated fresh each app
-/// launch and held only in memory — never written to disk — so a local
-/// webpage that scans loopback ports can neither drive agent turns nor read
-/// `/global/config` (which carries provider API keys). The webview gets it
-/// via the `runtime_password` command; Tauri IPC is app-only.
-pub(crate) fn server_password() -> &'static str {
-    static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    PASSWORD.get_or_init(|| random_hex(16))
-}
-
-/// Expose the per-run sidecar password to the frontend SDK client.
+/// Expose the internal gateway's token to the frontend SDK client. Every
+/// request the WebView sends to the same-origin gateway carries this as its
+/// bearer token; Tauri IPC is app-only, so it never reaches a remote page.
 #[tauri::command]
-pub fn runtime_password() -> String {
-    server_password().to_string()
+pub fn runtime_password(app: AppHandle) -> String {
+    let state = app.state::<RuntimeState>();
+    let lifecycle = state.lifecycle.lock().unwrap();
+    lifecycle.gateway_token.clone().unwrap_or_default()
 }
 
 pub(crate) fn free_port() -> u16 {
@@ -1291,6 +1294,21 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     Ok(child)
 }
 
+/// Poll the sidecar's HTTP surface until it answers (or a deadline passes).
+/// dsh takes a few seconds to boot (skill deployment + plugin load); callers
+/// that proxy to it must not fire before the socket listens.
+fn wait_for_sidecar(url: &str) -> Result<(), String> {
+    let authority = url.trim_start_matches("http://");
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        if TcpStream::connect(authority).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    Err("timed out waiting for the dsh sidecar to listen".into())
+}
+
 /// Kill and respawn a running sidecar on its stable port. The lifecycle lock
 /// covers the complete state transition, and URL is cleared before spawning so
 /// a failed restart can never leave a stale "running" marker behind.
@@ -1308,8 +1326,20 @@ pub(crate) fn restart_sidecar_if_running(
 
     let port = *lifecycle.port.get_or_insert_with(free_port);
     let child = spawn_sidecar(app, port)?;
-    let url = format!("http://127.0.0.1:{port}");
+    let sidecar_url = format!("http://127.0.0.1:{port}");
+    // The gateway targets the sidecar; a restart keeps the same gateway URL (the
+    // frontend's serverUrl) and token, only the proxied sidecar moves.
+    let gw_port = if let Some(gw_url) = &lifecycle.url {
+        gw_url.trim_start_matches("http://").split(':').next_back().and_then(|p| p.parse().ok()).unwrap_or(0)
+    } else {
+        let gw_state = app.state::<crate::gateway::GatewayState>().inner();
+        let (gw_port, gw_token) = crate::gateway::start_internal(app, gw_state)?;
+        lifecycle.gateway_token = Some(gw_token);
+        gw_port
+    };
+    let url = format!("http://127.0.0.1:{gw_port}");
     lifecycle.child = Some(child);
+    lifecycle.sidecar_url = Some(sidecar_url);
     lifecycle.url = Some(url.clone());
     Ok(Some(url))
 }
@@ -1333,9 +1363,23 @@ pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<S
     // Reuse a stable port across restarts so the frontend URL doesn't change.
     let port = *lifecycle.port.get_or_insert_with(free_port);
     let child = spawn_sidecar(&app, port)?;
-    let url = format!("http://127.0.0.1:{port}");
+    let sidecar_url = format!("http://127.0.0.1:{port}");
+    // The sidecar takes a moment to boot (skill deployment + plugin load); the
+    // gateway must not proxy to a not-yet-listening socket (the WebView's first
+    // WS streams would be refused). Poll until its HTTP surface answers.
+    wait_for_sidecar(&sidecar_url).map_err(|e| format!("dsh sidecar failed to start: {e}"))?;
+    // The desktop shell talks to the sidecar through a same-origin gateway:
+    // the WebView origin (tauri://localhost) cannot reach the loopback sidecar
+    // cross-origin (dsh's browser-trust fence), so the gateway serves the SPA
+    // and proxies /api + the WebSocket streams at its own origin, and the
+    // frontend authenticates with the returned token.
+    let gw_state = app.state::<crate::gateway::GatewayState>().inner();
+    let (gw_port, gw_token) = crate::gateway::start_internal(&app, gw_state)?;
+    let url = format!("http://127.0.0.1:{gw_port}");
     lifecycle.child = Some(child);
     lifecycle.url = Some(url.clone());
+    lifecycle.sidecar_url = Some(sidecar_url);
+    lifecycle.gateway_token = Some(gw_token);
     Ok(url)
 }
 
@@ -1550,6 +1594,8 @@ pub fn stop_runtime(state: State<'_, RuntimeState>) {
         let _ = child.kill();
     }
     lifecycle.url = None;
+    lifecycle.sidecar_url = None;
+    lifecycle.gateway_token = None;
 }
 
 pub fn kill_child(state: &RuntimeState) {
@@ -1558,6 +1604,8 @@ pub fn kill_child(state: &RuntimeState) {
         let _ = child.kill();
     }
     lifecycle.url = None;
+    lifecycle.sidecar_url = None;
+    lifecycle.gateway_token = None;
 }
 
 #[cfg(test)]

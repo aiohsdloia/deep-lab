@@ -23,12 +23,35 @@ export class DshApiClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly WebSocketCtor: typeof WebSocket | undefined;
+  /** Optional `Authorization: Bearer <token>` value attached to every request. */
+  private readonly authHeader: string | undefined;
+  /** Query token for WebSocket streams (browsers cannot set WS headers). */
+  private readonly wsQueryToken: string | undefined;
   private nextRpcId = 0;
 
-  constructor(options: { baseUrl: string; fetchImpl?: typeof fetch; WebSocket?: typeof WebSocket }) {
+  constructor(options: {
+    baseUrl: string;
+    fetchImpl?: typeof fetch;
+    WebSocket?: typeof WebSocket;
+    /** Value for the `Authorization` header on unary calls, e.g. `Bearer abc`. */
+    authHeader?: string;
+    /** Query token (`?token=`) appended to WebSocket stream URLs. */
+    wsQueryToken?: string;
+  }) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    // Bind fetch to the global: in some WebViews (e.g. WKWebView) `window.fetch`
+    // requires `this === window`, and calling a stored reference as a method
+    // throws "Illegal invocation". An arrow wrapper calls it with the global
+    // receiver explicitly.
+    const source = options.fetchImpl ?? globalThis.fetch;
+    this.fetchImpl = (input, init) => source.call(globalThis, input, init);
     this.WebSocketCtor = options.WebSocket ?? globalThis.WebSocket;
+    this.authHeader = options.authHeader;
+    this.wsQueryToken = options.wsQueryToken;
+  }
+
+  private headers(extra: Record<string, string> = {}): Record<string, string> {
+    return this.authHeader ? { ...extra, authorization: this.authHeader } : extra;
   }
 
   private mintRpcId(): string {
@@ -50,7 +73,7 @@ export class DshApiClient {
     };
     const response = await this.fetchImpl(new URL(`/api/${method}`, this.baseUrl), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: this.headers({ "content-type": "application/json" }),
       body: JSON.stringify(message),
       ...(signal ? { signal } : {}),
     });
@@ -73,7 +96,7 @@ export class DshApiClient {
     const message: ClientResponse = { type: "client-response", rpcId, result };
     const response = await this.fetchImpl(new URL("/api/respond", this.baseUrl), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: this.headers({ "content-type": "application/json" }),
       body: JSON.stringify(message),
     });
     if (!response.ok) {
@@ -96,6 +119,7 @@ export class DshApiClient {
     if (!Ctor) throw new Error("dsh event streams require WebSocket support");
     const url = new URL(path, this.baseUrl);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    if (this.wsQueryToken) url.searchParams.set("token", this.wsQueryToken);
     const socket = new Ctor(url.toString());
     const inbox: Array<ServerRequest<F>> = [];
     let wake: (() => void) | undefined;

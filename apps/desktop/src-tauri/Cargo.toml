@@ -30,6 +30,13 @@ getrandom = "0.4.3"
 opener = { version = "0.8.5", features = ["reveal"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }
+# WebSocket upgrade proxy: the desktop SPA's DshRuntime opens the dsh event
+# streams (`/api/events.mux`, `/api/events.host`) as WebSockets, and the
+# tauri://localhost webview cannot reach the loopback sidecar cross-origin — so
+# the gateway upgrades the client connection and relays frames to the sidecar.
+tungstenite = { version = "0.24", features = ["handshake"] }
+sha1 = "0.10"
+base64 = "0.22"
 # Watches the active workspace so file changes from outside the app (an external
 # editor, a detached process) still enqueue a debounced git snapshot.
 notify = "6"

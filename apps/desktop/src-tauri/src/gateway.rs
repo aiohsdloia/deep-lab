@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, State};
+use tungstenite::protocol::{Message as WsMessage, Role, WebSocket};
 
 use crate::artifact_file::{locate_under, mime_for, resolve_under, scope_root};
 use crate::runtime::{random_hex, runtime_root, sidecar_url, tighten_private, workspace_dir, RuntimeState};
@@ -178,6 +179,27 @@ fn stop(state: &GatewayState) {
     }
 }
 
+/// Start a loopback gateway for the desktop shell itself, on a fresh random
+/// token, independent of the user-facing remote-access gateway (which stays
+/// disabled unless the user opts in). The desktop WebView's origin
+/// (`tauri://localhost`) cannot reach the loopback dsh sidecar cross-origin
+/// (dsh's browser-trust fence demands Origin === Host), so the shell talks to
+/// the sidecar through this same-origin gateway instead: the SPA is served at
+/// the gateway origin, `/api` calls and the WebSocket event streams proxy to
+/// the sidecar, and the returned token rides every request.
+///
+/// Returns `(port, token)`.
+pub fn start_internal(app: &AppHandle, state: &GatewayState) -> Result<(u16, String), String> {
+    let p = Persisted {
+        enabled: true,
+        lan: false,
+        mode: "full".into(),
+        token: random_hex(24),
+    };
+    let port = start(app, state, &p)?;
+    Ok((port, p.token))
+}
+
 /// Auto-start on app launch if the user left it enabled last time.
 pub fn autostart(app: &AppHandle) {
     let state = app.state::<GatewayState>();
@@ -272,6 +294,38 @@ fn route(stream: &mut TcpStream, req: &Request, ctx: &Ctx) {
     if req.method == "GET" && path == "/v1/health" {
         respond_json(stream, 200, "{\"ok\":true,\"service\":\"open-science-gateway\"}");
         return;
+    }
+
+    // CORS preflight: the desktop WebView and the gateway web client call the
+    // gateway from a different origin than its own, so every cross-origin
+    // fetch with an Authorization header needs a successful OPTIONS first.
+    if req.method == "OPTIONS" {
+        let head = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: authorization, content-type\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Max-Age: 600\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        let _ = stream.write_all(head.as_bytes());
+        let _ = stream.flush();
+        return;
+    }
+
+    // ---- dsh event streams as WebSocket proxies ----
+    // The SPA's DshRuntime opens `/api/events.mux` and `/api/events.host` as
+    // WebSockets. The webview origin (tauri://localhost) cannot reach the
+    // loopback sidecar cross-origin, so the gateway upgrades the client socket
+    // here and relays frames to the sidecar's WebSocket. Any other /api path
+    // falls through to the transparent HTTP proxy below.
+    if is_websocket_upgrade(&req) {
+        let path = req.path.as_str();
+        if path == "/api/events.mux" || path == "/api/events.host" {
+            if !authed(&req, &ctx.token()) {
+                respond_json(stream, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            if ctx.read_only() {
+                respond_json(stream, 403, "{\"error\":\"token is read-only\"}");
+                return;
+            }
+            proxy_websocket(stream, req, ctx, path);
+            return;
+        }
     }
 
     // ---- /v1 contract API (CLI / curl / the SPA's file browser) ----
@@ -599,6 +653,135 @@ fn fs_read(stream: &mut TcpStream, req: &Request, ctx: &Ctx) {
 
 /// Proxy the sidecar's SSE event stream verbatim (workspace-wide). Holds this
 /// connection thread until the sidecar closes or the client disconnects.
+/// True when the request is a WebSocket upgrade (Connection: Upgrade + the
+/// Sec-WebSocket-* handshake headers the client sends).
+fn is_websocket_upgrade(req: &Request) -> bool {
+    let upgrade = req.header("connection").map(|v| v.to_ascii_lowercase());
+    if !matches!(upgrade.as_deref(), Some(u) if u.contains("upgrade")) {
+        return false;
+    }
+    req.header("sec-websocket-key").is_some() && req.header("upgrade").map(|v| v.to_ascii_lowercase()) == Some("websocket".to_string())
+}
+
+/// Upgrade the client connection and relay the dsh sidecar's WebSocket event
+/// stream at the same path. The SPA's DshRuntime opens `/api/events.mux` and
+/// `/api/events.host` as WebSockets (read-only streams); the webview origin
+/// (tauri://localhost) cannot reach the loopback sidecar cross-origin, and dsh
+/// answers a plain GET to those paths with 426 — so the gateway completes both
+/// handshakes and pumps raw WebSocket bytes from the sidecar to the client.
+///
+/// The client sends nothing on these streams, so a single downstream pump
+/// carries the whole stream. (If a future client ever sends control frames,
+/// WebSocket frames are byte-identical once both handshakes are done — the
+/// relay below passes every byte through regardless of direction.)
+fn proxy_websocket(stream: &mut TcpStream, req: &Request, ctx: &Ctx, path: &str) {
+    let base = match endpoint(ctx) {
+        Some(v) => v,
+        None => {
+            eprintln!("[gw-ws] runtime not started");
+            return respond_json(stream, 503, "{\"error\":\"runtime not started\"}");
+        }
+    };
+    // 1. Complete the client's upgrade handshake MANUALLY: `Request::parse`
+    //    already consumed the HTTP request line and headers through its own
+    //    BufReader, so `tungstenite::accept` on a fresh socket clone would read
+    //    past them (or block). The upgrade key is in the parsed request; write
+    //    the 101 response ourselves, then hand the raw socket to tungstenite in
+    //    client role for frame parsing.
+    let Some(key) = req.header("sec-websocket-key") else {
+        return respond_json(stream, 400, "{\"error\":\"missing sec-websocket-key\"}");
+    };
+    let accept_value = websocket_accept(key);
+    let head = format!(
+        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_value}\r\n\r\n"
+    );
+    if stream.write_all(head.as_bytes()).is_err() {
+        return;
+    }
+    let _ = stream.flush();
+    let client_raw = match stream.try_clone() {
+        Ok(s) => s,
+        Err(e) => return respond_json(stream, 500, &err_json(&e.to_string())),
+    };
+    // Server role: the gateway is the WebSocket *server* toward the webview, so
+    // frames we send it are unmasked (as a client expects from its server) and
+    // frames it sends us are masked (which tungstenite unmasks on read).
+    let mut client_ws = WebSocket::from_raw_socket(client_raw, Role::Server, None);
+
+    // 2. Connect to the sidecar's WebSocket at the same path, presenting the
+    //    sidecar authority as the Origin so dsh's browser-trust fence passes.
+    let authority = sidecar_host_port(&base);
+    let url = format!("ws://{}{}", authority, path);
+    let tcp = match std::net::TcpStream::connect(authority) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[gw-ws] sidecar connect FAILED {authority}: {e}");
+            return respond_json(stream, 502, &err_json(&e.to_string()));
+        }
+    };
+    let request = match tungstenite::client::IntoClientRequest::into_client_request(url) {
+        Ok(mut r) => {
+            if let Ok(o) = format!("http://{}", authority).parse() {
+                r.headers_mut().insert("Origin", o);
+            }
+            r
+        }
+        Err(e) => return respond_json(stream, 502, &err_json(&e.to_string())),
+    };
+    let mut sidecar_ws = match tungstenite::client(request, tcp) {
+        Ok((ws, _resp)) => ws,
+        Err(e) => {
+            eprintln!("[gw-ws] sidecar WS handshake FAILED {authority}: {e}");
+            return respond_json(stream, 502, &err_json(&e.to_string()));
+        }
+    };
+
+    // 3. Relay every frame the sidecar sends to the client, then close both.
+    loop {
+        match sidecar_ws.read() {
+            Ok(WsMessage::Text(text)) => {
+                if client_ws.send(WsMessage::Text(text)).is_err() {
+                    break;
+                }
+            }
+            Ok(WsMessage::Binary(data)) => {
+                if client_ws.send(WsMessage::Binary(data)).is_err() {
+                    break;
+                }
+            }
+            Ok(WsMessage::Ping(p)) => {
+                if client_ws.send(WsMessage::Pong(p)).is_err() {
+                    break;
+                }
+            }
+            Ok(WsMessage::Close(frame)) => {
+                let _ = client_ws.send(WsMessage::Close(frame));
+                break;
+            }
+            Ok(_) => { /* ignore other control frames */ }
+            Err(_) => break,
+        }
+    }
+    let _ = client_ws.close(None);
+    let _ = sidecar_ws.close(None);
+}
+
+/// Compute the `Sec-WebSocket-Accept` value for a client's upgrade key.
+fn websocket_accept(key: &str) -> String {
+    use base64::Engine as _;
+    use sha1::{Digest as _, Sha1};
+    let mut hasher = Sha1::new();
+    hasher.update(key.as_bytes());
+    hasher.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+    let digest = hasher.finalize();
+    base64::engine::general_purpose::STANDARD.encode(digest)
+}
+
+/// Host:port pair of the sidecar base URL ("127.0.0.1:3080").
+fn sidecar_host_port(base: &str) -> &str {
+    base.trim_start_matches("http://").trim_start_matches("https://")
+}
+
 fn stream_api(stream: &mut TcpStream, ctx: &Ctx, path: &str) {
     let base = match endpoint(ctx) {
         Some(v) => v,
@@ -810,7 +993,7 @@ fn reason(status: u16) -> &'static str {
 
 fn respond(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u8]) {
     let head = format!(
-        "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: authorization, content-type\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         reason(status),
         body.len()
     );

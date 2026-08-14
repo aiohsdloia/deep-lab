@@ -46,6 +46,7 @@ import {
   setProxySetting as persistProxySetting,
   setWorkspace,
   startRuntime,
+  runtimePassword,
   workspacePath,
   workspaceSkillNames,
   type ApprovalMode,
@@ -693,6 +694,8 @@ function teardownClient() {
 // N streams need no per-stream demux. Same sidecar → same baseUrl/password.
 const streamClients = new Map<string, DshRuntime>();
 let streamBaseUrl = "";
+/** Gateway token for background streams (desktop/gateway auth), or "". */
+let streamAuth = "";
 /** The store's event handler, captured once (set/get are stable) so foreground
  *  and every background stream share one folding path. */
 let sharedEventHandler: ((event: OpenCodeEvent) => void) | null = null;
@@ -2295,6 +2298,20 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // auth, and the workspace directory comes from /v1/whoami.
       baseUrl = gatewayOrigin();
       password = gatewayToken();
+    } else if (isTauri) {
+      // Desktop shell: the runtime is a bundled sidecar reached through the
+      // internal same-origin gateway (the WebView origin tauri://localhost
+      // cannot reach the loopback sidecar cross-origin — dsh's browser-trust
+      // fence demands Origin === Host). Bootstrap already stored the gateway
+      // URL in serverUrl; grab the token from IPC.
+      password = await runtimePassword();
+    } else {
+      // Plain-browser dev (`pnpm dev`): vite proxies the same-origin /api to a
+      // user-run sidecar, no token.
+      password = null;
+    }
+    if (isGatewayWeb) {
+      // Web client: the workspace directory comes from /v1/whoami.
       directory = null;
       let readOnly = false;
       try {
@@ -2313,18 +2330,16 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       }
       set({ serverUrl: baseUrl, workspace: directory, webReadOnly: readOnly });
     } else {
-      // Scope skill discovery to the sidecar's workspace (null in browser dev).
+      // Scope skill discovery to the workspace folder. Desktop resolves it
+      // locally (reliable IPC); browser dev keeps it null.
       directory = await workspacePath();
       set({ workspace: directory, approvalMode: await getApprovalMode() });
       if (!samePath(previousWorkspace, directory)) clearResolvedPaths();
-      // dsh serves loopback-only with a browser-trust fence; no sidecar
-      // password exists. The gateway web client still authenticates with its
-      // own token (see the isGatewayWeb branch above).
-      password = null;
     }
     const oc = new DshRuntime({
       baseUrl,
       directory: directory ?? undefined,
+      ...(password ? { authHeader: `Bearer ${password}`, wsQueryToken: password } : {}),
     });
     opencodeClient = oc;
     client = oc;
@@ -2333,6 +2348,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // this folder, so drop any background stream that was covering it (avoid a
     // double fold of the same events).
     streamBaseUrl = baseUrl;
+    streamAuth = password ?? "";
     if (directory) removeStreamClient(directory);
     clientStatusUnsub = c.onStatus((status) => {
       void logDebug(`status → ${status}`);
@@ -2781,6 +2797,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
                     temporaryClient = new DshRuntime({
                       baseUrl: streamBaseUrl,
                       directory: sourceDirectory,
+                      ...(streamAuth
+                        ? { authHeader: `Bearer ${streamAuth}`, wsQueryToken: streamAuth }
+                        : {}),
                     });
                     await temporaryClient.connect();
                     presentationClient = temporaryClient;
@@ -3992,6 +4011,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       const c = new DshRuntime({
         baseUrl: streamBaseUrl,
         directory: dir,
+        ...(streamAuth
+          ? { authHeader: `Bearer ${streamAuth}`, wsQueryToken: streamAuth }
+          : {}),
       });
       if (sharedEventHandler) c.onEvent(sharedEventHandler);
       streamClients.set(dir, c);

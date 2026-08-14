@@ -41,6 +41,10 @@ export interface DshRuntimeOptions {
   WebSocket?: typeof WebSocket;
   /** Workspace directory new sessions run in. */
   directory?: string;
+  /** Value for the `Authorization` header on unary calls, e.g. `Bearer abc`. */
+  authHeader?: string;
+  /** Query token (`?token=`) appended to WebSocket stream URLs. */
+  wsQueryToken?: string;
 }
 
 /** Parse a raw model-arguments JSON string into an object, or undefined. */
@@ -97,6 +101,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       baseUrl: options.baseUrl,
       fetchImpl: options.fetchImpl,
       WebSocket: options.WebSocket,
+      authHeader: options.authHeader,
+      wsQueryToken: options.wsQueryToken,
     });
     this.directory = options.directory;
   }
