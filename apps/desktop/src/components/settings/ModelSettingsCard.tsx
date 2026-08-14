@@ -65,7 +65,7 @@ export function ModelSettingsCard() {
           <p className="mb-2 text-xs text-muted">{t("model.apiKeyHint")}</p>
           <div className="flex items-center gap-2">
             <input
-              type="password"
+              type="text"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               onKeyDown={(e) => {
