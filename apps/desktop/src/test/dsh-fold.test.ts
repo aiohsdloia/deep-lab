@@ -76,4 +76,42 @@ describe("DshRuntime chunk folding partIds", () => {
     // And one partId throughout.
     expect(new Set(seen.map((e) => e.partId)).size).toBe(1);
   });
+
+  it("surfaces nested tool output from dsh's tool/result event", () => {
+    const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+    const seen: Array<{ callId: string; output?: string }> = [];
+    rt.onEvent((e: OpenCodeEvent) => {
+      if (e.type === "tool.updated") seen.push({ callId: e.callId, output: e.output });
+    });
+    const fold = (e: unknown) =>
+      (rt as unknown as { foldSessionEvent: (sid: string, e: unknown) => void }).foldSessionEvent("s1", e);
+    fold({
+      type: "tool/call",
+      data: { callId: "call_1", name: "bash", arguments: '{"command":"echo hi"}' },
+    });
+    // dsh nests the result: callId lives on message.source.callId and the
+    // tool-result block's toolCallId; the text is inside nested content.
+    fold({
+      type: "tool/result",
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { kind: "tool", callId: "call_1" },
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_1",
+              content: [{ type: "text", text: "hi\n" }],
+              isError: false,
+            },
+          ],
+        },
+      },
+    });
+    const result = seen.find((s) => s.output !== undefined);
+    expect(result).toBeDefined();
+    expect(result!.callId).toBe("call_1");
+    expect(result!.output).toBe("hi\n");
+  });
 });

@@ -1194,9 +1194,10 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     let cache = root.join("xdg-cache");
     let state = root.join("xdg-state");
     let dsh_home = root.join("dsh-home");
-    // Run dsh inside the user-facing workspace, NOT the app's cwd (which is `/`
-    // when launched from Finder) — otherwise it scans the whole filesystem root.
-    let workspace = workspace_dir(app)?;
+    // Require a resolvable user-facing workspace (the sidecar's current_dir is
+    // the bundled dsh resource, not the app cwd — which is `/` when launched
+    // from Finder).
+    let _workspace = workspace_dir(app)?;
     for d in [&cfg, &data, &cache, &state, &dsh_home, &dsh_home.join("agents")] {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
@@ -1224,15 +1225,24 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     // launcher that re-anchors the CLI onto its own directory. The sidecar is
     // spawned as `node <launcher> --profile web --host 127.0.0.1 --port <port>`,
     // so it needs node on PATH (dev: system node; releases bundle one).
-    let launcher = app
+    // dsh is a Node CLI (`@deepseek-ai/dsh`), bundled under the dsh resource.
+    // The launcher.mjs wrapper exists to re-anchor dsh's launch cwd onto the
+    // resource dir (dsh resolves its profile from cwd), but under LaunchServices
+    // (`open` / Dock) that chdir/spawn step hangs and the sidecar never comes
+    // up — observed as `timed out waiting for the dsh sidecar to listen`. Spawn
+    // the CLI directly with current_dir already set to the resource dir, which
+    // achieves the same anchor without the wrapper's fork.
+    let dsh_dir = app
         .path()
-        .resolve("dsh/launcher.mjs", tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("dsh launcher not found: {e}"))?;
+        .resolve("dsh", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("dsh resource not found: {e}"))?;
+    let cli = dsh_dir
+        .join("node_modules/@deepseek-ai/dsh/lib/bin.js");
     let node = std::env::var("DEEPLAB_NODE").unwrap_or_else(|_| "node".to_string());
 
     let mut builder = Command::new(node);
     builder
-        .arg(launcher)
+        .arg(&cli)
         .args(["--profile", "web", "--host", "127.0.0.1", "--port", port_str.as_str()])
         // App-private dirs: dsh never touches the user's ~/.dsh. DSH_AGENTS_HOME
         // isolates the user-level `~/.agents/skills` pack — a legacy Open Lab
@@ -1251,7 +1261,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
         // the recording app version into provenance — they run outside the app
         // and can't otherwise know it.
         .env("OPENSCIENCE_APP_VERSION", app.package_info().version.to_string())
-        .current_dir(workspace);
+        .current_dir(&dsh_dir);
     // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
     builder.env("PATH", enriched_path());
     // The agent's own `ssh`/`rsync`/`sbatch` calls ride the app's shared

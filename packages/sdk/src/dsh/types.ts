@@ -104,6 +104,7 @@ export interface ContentBlock {
   text?: string;
   name?: string;
   id?: string;
+  toolCallId?: string;
   arguments?: string;
   content?: ContentBlock[];
   isError?: boolean;

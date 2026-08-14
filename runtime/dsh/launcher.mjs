@@ -27,6 +27,14 @@ process.chdir(here);
 const child = spawn(process.execPath, [cli, ...args], {
   stdio: "inherit",
 });
+// A spawn that fails (missing module, EACCES, …) fires `error`, NOT `exit` —
+// without this handler the launcher sat silently and the app timed out waiting
+// for a sidecar that would never come. Surface the cause on stderr (the host
+// drains it into its debug log) and exit so the app can report it.
+child.on("error", (err) => {
+  console.error(`[dsh-launcher] spawn failed: ${err.message}`);
+  process.exit(1);
+});
 child.on("exit", (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 0);

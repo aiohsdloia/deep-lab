@@ -58,12 +58,26 @@ function parseArguments(args: string): Record<string, unknown> | undefined {
 }
 
 /** Join a tool result's content blocks into one display string. */
+/** Collect every text leaf under a content-block tree. dsh nests tool output:
+ *  `message.content` holds `{ type: "tool-result", content: [{ type: "text",
+ *  text }] }`, so a flat scan misses it. */
+function collectText(blocks: ContentBlock[] | undefined): string[] {
+  if (!blocks) return [];
+  const out: string[] = [];
+  for (const b of blocks) {
+    if (b.type === "text" && typeof b.text === "string") {
+      out.push(b.text);
+    } else if (b.type === "tool-result" && Array.isArray(b.content)) {
+      out.push(...collectText(b.content as ContentBlock[]));
+    } else if (Array.isArray((b as { content?: unknown }).content)) {
+      out.push(...collectText((b as { content: unknown }).content as ContentBlock[]));
+    }
+  }
+  return out;
+}
+
 function toolOutput(blocks: ContentBlock[] | undefined): string | undefined {
-  if (!blocks) return undefined;
-  const text = blocks
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text)
-    .join("\n");
+  const text = collectText(blocks).join("\n");
   return text ? text : undefined;
 }
 
@@ -346,8 +360,21 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         break;
       }
       case "tool/result": {
-        const data = event.data as { callId?: string; message?: { toolCallId?: string; content?: ContentBlock[]; isError?: boolean } };
-        const callId = data?.callId ?? data?.message?.toolCallId;
+        const data = event.data as {
+          callId?: string;
+          message?: {
+            toolCallId?: string;
+            source?: { callId?: string };
+            content?: ContentBlock[];
+            isError?: boolean;
+          };
+        };
+        // dsh carries the id on message.source.callId / the tool-result block's
+        // toolCallId — NOT on the top level — so resolve from all three.
+        const contentCallId = (data?.message?.content ?? []).find(
+          (b) => b.type === "tool-result" && typeof b.toolCallId === "string",
+        )?.toolCallId;
+        const callId = data?.callId ?? data?.message?.toolCallId ?? data?.message?.source?.callId ?? contentCallId;
         if (!callId) break;
         this.emit({
           type: "tool.updated",
@@ -845,6 +872,25 @@ function toSessionMeta(
 /** Fold a dsh session log into the HistoryMessage[] the app renders. */
 function foldHistory(events: SessionEvent[]): HistoryMessage[] {
   const messages: HistoryMessage[] = [];
+  // dsh reports a tool's OUTPUT in a separate `tool/result` event (nested
+  // content), not on the assistant/message's `tool-call` block — collect them
+  // by callId first so the tool parts below carry their result.
+  const toolOutputs = new Map<string, string>();
+  for (const event of events) {
+    if (event.type === "tool/result") {
+      const data = event.data as {
+        callId?: string;
+        message?: { toolCallId?: string; source?: { callId?: string }; content?: ContentBlock[] };
+      };
+      const contentCallId = (data?.message?.content ?? []).find(
+        (b) => b.type === "tool-result" && typeof b.toolCallId === "string",
+      )?.toolCallId;
+      const callId =
+        data?.callId ?? data?.message?.toolCallId ?? data?.message?.source?.callId ?? contentCallId;
+      const out = toolOutput(data?.message?.content);
+      if (callId && out !== undefined) toolOutputs.set(callId, out);
+    }
+  }
   for (const event of events) {
     if (event.type === "user/message") {
       const data = event.data as {
@@ -873,10 +919,15 @@ function foldHistory(events: SessionEvent[]): HistoryMessage[] {
         } else if (block.type === "reasoning" && typeof block.text === "string") {
           parts.push({ type: "reasoning", text: block.text });
         } else if (block.type === "tool-call" && block.id && block.name) {
+          const output = toolOutputs.get(block.id);
           parts.push({
             type: "tool",
             tool: block.name,
-            state: { status: "completed", title: block.name },
+            state: {
+              status: "completed",
+              title: block.name,
+              ...(output !== undefined ? { output } : {}),
+            },
           });
         }
       }
