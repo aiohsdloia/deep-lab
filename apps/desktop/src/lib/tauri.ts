@@ -994,8 +994,8 @@ export async function modalStatus(): Promise<ModalStatus | null> {
   return invoke<ModalStatus>("modal_status");
 }
 
-/** Copy a bundled example project into the workspace (idempotent; never
- *  overwrites user edits). Returns the workspace directory name. */
+/** Copy a bundled example project into the workspace base (idempotent; never
+ *  overwrites user edits). Returns the absolute installed workspace path. */
 export async function installExample(name: string): Promise<string> {
   if (!isTauri) throw new Error("not running in the desktop app");
   const { invoke } = await import("@tauri-apps/api/core");

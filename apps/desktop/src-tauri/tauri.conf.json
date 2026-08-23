@@ -54,7 +54,8 @@
       "../../../runtime/dsh-profile/agent": "profile/agent/",
       "../../../runtime/dsh-profile/command": "profile/command/",
       "../../../runtime/harness": "harness/",
-      "../../../examples/climate-trends": "examples/climate-trends/"
+      "../../../examples/climate-trends": "examples/climate-trends/",
+      "../../../examples/bci-trends": "examples/bci-trends/"
     },
     "icon": [
       "icons/32x32.png",

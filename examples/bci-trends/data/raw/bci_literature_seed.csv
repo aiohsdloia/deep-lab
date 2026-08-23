@@ -1,0 +1,15 @@
+year,title,topic,modality,application,keywords,citations
+2023,Adaptive decoding for invasive motor BCIs,motor decoding,invasive,motor restoration,"ECoG;adaptive decoder;closed loop",42
+2023,Portable EEG spelling with language-model correction,communication,non-invasive,assistive communication,"EEG;P300;language model",31
+2023,Shared-control exoskeletons driven by hybrid BCI,motor control,hybrid,rehabilitation,"EEG;EMG;exoskeleton",27
+2024,Foundation models for neural signal representation,foundation models,multimodal,general decoding,"self-supervised learning;neural embeddings",58
+2024,Low-latency speech BCI with articulatory features,speech decoding,invasive,communication,"speech BCI;latency;ECoG",65
+2024,Benchmarking open EEG datasets for BCI reproducibility,reproducibility,non-invasive,benchmarking,"open dataset;EEG;reproducibility",36
+2024,Closed-loop stimulation guided by reinforcement learning,closed-loop control,invasive,neurostimulation,"reinforcement learning;stimulation",44
+2025,Multimodal BCI calibration with eye tracking and EEG,multimodal calibration,hybrid,assistive control,"eye tracking;EEG;calibration",39
+2025,On-device neural decoding for wearable BCIs,edge inference,non-invasive,wearable computing,"edge AI;wearable;EEG",52
+2025,Privacy-preserving federated learning for clinical BCI,privacy and security,hybrid,clinical deployment,"federated learning;privacy;clinical BCI",46
+2025,Robust speech neuroprosthesis under daily-use noise,speech decoding,invasive,communication,"speech neuroprosthesis;robustness",73
+2026,Agent-assisted experiment design for BCI pipelines,agentic research,hybrid,research automation,"agent;workflow;reproducibility",18
+2026,Unified evaluation cards for BCI model reporting,reproducibility,multimodal,benchmarking,"evaluation card;model reporting",21
+2026,Flash-efficient neural sequence models for real-time BCI,efficient models,invasive,real-time control,"sequence model;real-time;efficient inference",34

@@ -9,11 +9,28 @@ describe("WorkflowStarters", () => {
     // Titles are i18n-translated (session:starters.<id>.title); WORKFLOW_STARTERS
     // itself no longer carries display copy, only ids/prompts — assert the
     // rendered English text directly.
+    expect(screen.getByText("Run the BCI trends demo")).toBeInTheDocument();
     expect(screen.getByText("Build a bioinformatics tool")).toBeInTheDocument();
     expect(screen.getByText("New browser action")).toBeInTheDocument();
     expect(screen.getByText("Build a phylogenetic tree")).toBeInTheDocument();
     expect(screen.getByText("Clean conversation")).toBeInTheDocument();
-    expect(WORKFLOW_STARTERS).toHaveLength(4);
+    expect(WORKFLOW_STARTERS).toHaveLength(5);
+  });
+
+  it("sends the BCI demo prompt and starter metadata on click", async () => {
+    const onPick = vi.fn();
+    render(<WorkflowStarters onPick={onPick} />);
+    await userEvent.click(screen.getByText("Run the BCI trends demo"));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick.mock.calls[0][0]).toContain("bci-trends");
+    expect(onPick.mock.calls[0][0]).toContain("provenance.jsonl");
+    expect(onPick.mock.calls[0][1]).toMatchObject({ id: "bci-trends", example: "bci-trends" });
+  });
+
+  it("hides bundled examples when filesystem access is unavailable", () => {
+    render(<WorkflowStarters onPick={() => {}} examplesEnabled={false} />);
+    expect(screen.queryByText("Run the BCI trends demo")).not.toBeInTheDocument();
+    expect(screen.getByText("Build a bioinformatics tool")).toBeInTheDocument();
   });
 
   it("sends the build-a-bioinformatics-tool prompt on click", async () => {

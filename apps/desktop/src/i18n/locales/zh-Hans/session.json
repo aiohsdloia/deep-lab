@@ -145,6 +145,10 @@
     "newSession": "新建会话",
     "heading": "我们该研究什么？",
     "subheading": "在下方描述您的分析——或从以下选项开始。",
+    "bci-trends": {
+      "title": "运行 BCI 趋势演示",
+      "description": "安装内置脑机接口文献工作区，并生成可追溯报告。"
+    },
     "build-bio-tool": {
       "title": "构建一个生物信息软件",
       "description": "在本工作区中端到端地构建一个小型、自包含的生物信息学软件。"

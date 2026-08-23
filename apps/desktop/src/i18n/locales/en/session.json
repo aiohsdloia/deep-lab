@@ -145,6 +145,10 @@
     "newSession": "New session",
     "heading": "What should we look into?",
     "subheading": "Describe your analysis below — or start from one of these.",
+    "bci-trends": {
+      "title": "Run the BCI trends demo",
+      "description": "Install the bundled BCI literature workspace and produce a traceable report."
+    },
     "build-bio-tool": {
       "title": "Build a bioinformatics tool",
       "description": "Build a small, self-contained bioinformatics software end to end in this workspace."

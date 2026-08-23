@@ -4,10 +4,10 @@
 use std::path::Path;
 use tauri::{path::BaseDirectory, AppHandle, Manager};
 
-use crate::runtime::workspace_dir;
+use crate::runtime::base_workspace_dir;
 
 /// Bundled example projects; the command rejects anything else.
-const EXAMPLES: &[&str] = &["climate-trends"];
+const EXAMPLES: &[&str] = &["climate-trends", "bci-trends"];
 
 /// Copy `src` into `dst` recursively WITHOUT overwriting existing files — a
 /// re-installed example must never clobber the user's edited copy.
@@ -25,8 +25,8 @@ pub(crate) fn copy_missing(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Copy a bundled example project into the workspace (idempotent, never
-/// overwrites) and return its workspace-relative directory name.
+/// Copy a bundled example project into the workspace base (idempotent, never
+/// overwrites) and return its absolute workspace path.
 #[tauri::command(async)]
 pub fn install_example(app: AppHandle, name: String) -> Result<String, String> {
     if !EXAMPLES.contains(&name.as_str()) {
@@ -39,9 +39,9 @@ pub fn install_example(app: AppHandle, name: String) -> Result<String, String> {
     if !src.is_dir() {
         return Err("example not bundled in this build".into());
     }
-    let dst = workspace_dir(&app)?.join(&name);
+    let dst = base_workspace_dir(&app)?.join(&name);
     copy_missing(&src, &dst).map_err(|e| format!("example install failed: {e}"))?;
-    Ok(name)
+    Ok(crate::artifact_file::native_path(&dst))
 }
 
 #[cfg(test)]

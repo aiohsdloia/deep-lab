@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import {
+  BrainCircuit,
   ChevronRight,
   Dna,
   GitFork,
@@ -16,11 +17,25 @@ export interface WorkflowStarter {
   /** A "clean" starter is NOT a prompt: clicking it opens a truly blank session
    *  (nothing loaded, no instruction sent) instead of sending `prompt`. */
   clean?: boolean;
+  /** Bundled example workspace to install and switch into before sending. */
+  example?: string;
 }
 
 /** One-click full-workflow prompts (P0-1): a single request that carries the
  *  agent through data → code → figure → report, all inside the app. */
 export const WORKFLOW_STARTERS: WorkflowStarter[] = [
+  {
+    id: "bci-trends",
+    icon: <BrainCircuit size={17} strokeWidth={1.75} />,
+    example: "bci-trends",
+    prompt:
+      "在这个内置的 bci-trends 工作区中完成一个端到端科研演示：先读取 README.md 和 " +
+      "data/raw/bci_literature_seed.csv，确认任务是分析 2023–2026 年脑机接口文献趋势；然后编写 " +
+      "scripts/analyze.py，用本地 CSV 生成 data/processed/corpus_summary.csv、figures/year_trend.png、" +
+      "figures/topic_clusters.png、figures/top_keywords.png 和 reports/report.md。报告必须说明方法、数据来源、" +
+      "关键趋势、局限性，并且每个数字都必须来自脚本实际计算。最后写入 provenance.jsonl，记录输入文件、脚本、" +
+      "输出文件和运行命令。不要联网，不要编造外部论文，只使用工作区已有数据。",
+  },
   {
     id: "build-bio-tool",
     icon: <Dna size={17} strokeWidth={1.75} />,
@@ -62,16 +77,23 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
 export function WorkflowStarters({
   onPick,
   onBlank,
+  examplesEnabled = true,
 }: {
-  onPick: (prompt: string) => void;
+  onPick: (prompt: string, starter?: WorkflowStarter) => void;
   /** Fired for the "clean" card — open a truly blank session, send nothing. */
   onBlank?: () => void;
+  /** Bundled examples need desktop filesystem access; hide them in web mode. */
+  examplesEnabled?: boolean;
 }) {
   const { t } = useTranslation(["session", "common"]);
   // Display copy per starter id — t()'s generated key type rejects a dynamic
   // `starters.${id}.title` template, so each card's copy is looked up by id
   // from this literal-keyed map instead.
   const starterCopy: Record<string, { title: string; description: string }> = {
+    "bci-trends": {
+      title: t("starters.bci-trends.title"),
+      description: t("starters.bci-trends.description"),
+    },
     "build-bio-tool": {
       title: t("starters.build-bio-tool.title"),
       description: t("starters.build-bio-tool.description"),
@@ -83,6 +105,10 @@ export function WorkflowStarters({
     },
     clean: { title: t("starters.clean.title"), description: t("starters.clean.description") },
   };
+  const starters = examplesEnabled
+    ? WORKFLOW_STARTERS
+    : WORKFLOW_STARTERS.filter((s) => !s.example);
+
   return (
     <div className="flex min-h-[62vh] flex-col items-center justify-center">
       <div className="w-full max-w-[500px]">
@@ -97,7 +123,7 @@ export function WorkflowStarters({
         </div>
 
         <div className="mt-7 overflow-hidden rounded-card border border-border bg-surface shadow-card">
-          {WORKFLOW_STARTERS.map((s) => (
+          {starters.map((s) => (
             <button
               key={s.id}
               onClick={() => {
@@ -105,7 +131,7 @@ export function WorkflowStarters({
                   onBlank?.();
                   return;
                 }
-                onPick(s.prompt);
+                onPick(s.prompt, s);
               }}
               className="group flex w-full items-center gap-3.5 border-t border-border px-4 py-3.5 text-left transition-colors first:border-t-0 hover:bg-surface-2"
             >

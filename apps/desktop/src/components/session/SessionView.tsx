@@ -25,7 +25,7 @@ import { draftKeyFor, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
 import { toast } from "@/lib/toast";
 import { useLayoutStore } from "@/lib/layout";
 import { startPaneDrag } from "@/lib/dragPane";
-import { isTauri, openFolderIn } from "@/lib/tauri";
+import { installExample, isTauri, openFolderIn } from "@/lib/tauri";
 import { isGatewayWeb } from "@/lib/webMode";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { queryRuns } from "@/lib/runs";
@@ -40,7 +40,7 @@ import { SelectionActions } from "@/components/thread/SelectionActions";
 import { Elapsed } from "@/components/thread/ToolGroup";
 import { Composer } from "@/components/thread/Composer";
 import { baseName } from "@/components/thread/WorkspaceChip";
-import { WorkflowStarters } from "@/components/thread/WorkflowStarters";
+import { WorkflowStarters, type WorkflowStarter } from "@/components/thread/WorkflowStarters";
 import { InteractionPrompt } from "@/components/thread/InteractionPrompt";
 import { QueuePanel } from "@/components/thread/QueuePanel";
 import { InspectorShell } from "@/components/inspector/InspectorShell";
@@ -141,6 +141,7 @@ export function SessionView({
   const commands = useRuntimeStore((s) => s.commands);
   const connect = useRuntimeStore((s) => s.connect);
   const sendPrompt = useRuntimeStore((s) => s.sendPrompt);
+  const switchWorkspace = useRuntimeStore((s) => s.switchWorkspace);
   const runShell = useRuntimeStore((s) => s.runShell);
   const runCommand = useRuntimeStore((s) => s.runCommand);
   const openArtifact = useRuntimeStore((s) => s.openArtifact);
@@ -194,6 +195,19 @@ export function SessionView({
   const onSend = async (text: string, attachments?: string[]) => {
     pinEphemeral();
     bindIfCreated(await sendPrompt(text, sid ?? undefined, draftKey, attachments));
+  };
+  const onStarterPick = async (prompt: string, starter?: WorkflowStarter) => {
+    pinEphemeral();
+    if (starter?.example) {
+      try {
+        const examplePath = await installExample(starter.example);
+        await switchWorkspace({ path: examplePath, key: draftKey });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+        return;
+      }
+    }
+    bindIfCreated(await sendPrompt(prompt, sid ?? undefined, draftKey));
   };
   const onRunShell = async (command: string) => {
     pinEphemeral();
@@ -805,7 +819,8 @@ export function SessionView({
             )}
             {connected && isEmpty && !eid && !webReadOnly && (
               <WorkflowStarters
-                onPick={(p) => void onSend(p)}
+                onPick={(p, s) => void onStarterPick(p, s)}
+                examplesEnabled={isTauri && !isGatewayWeb}
                 // "Clean" is NOT a prompt: reset this pane to a truly empty
                 // thread — no blocks, no status line, nothing sent — and mark
                 // the pane clean so its sends skip the preset system template.
