@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-08-23 14:20` — Week-one dsh foundation complete on `codex/week-1-dsh-foundation`: pinned Harness `0.1.1-rc.2`, added a typed RPC contract and Goal/Model/Settings adapters, fixed Goal CAS and current-model protocol drift, switched Settings to the live provider catalog, documented the OpenLab migration matrix, removed dead ACP/goal-plugin build references, and passed typecheck, lint, production web build, real sidecar smoke, dsh contract tests, and GNU-target Rust source check; a credentialed model prompt and formal Windows bundle remain explicit environment-gated checks.
 - `2026-08-15 04:10` — DeepLab is now fully dsh-only and isolated from Open Lab / OpenCode: removed `OpenCodeClient` (only `DshRuntime` remains), the entire ACP runtime (acp.rs, sdk/acp, acp-server, ACP settings UI), `opencode_config.rs` (renamed `dsh_config`), the goal plugin's `@opencode-ai/plugin` dependency + goal.rs/GoalPill, `runtime/opencode-profile` (renamed `dsh-profile`), and every config path / brand label (`opencode/` dirs → `dsh/`, `OpenCodeEvent` → `RuntimeEvent`, Open Lab → DeepLab). Migrated the Open Lab remote-machine list (life-bioinfo-gpu/cpu/win) into `~/Documents/DeepLab/.deeplab/compute.json`. Verified speed (session ~140ms, first token ~1s), a 5-turn long session, and 3 parallel sessions all complete; the session skill list contains only bundled English dsh science skills.
 - `2026-08-15 02:10` — Installed DeepLab.app to /Applications (no dmg) and fixed the two bugs that blocked real use there: (1) the sidecar launcher's chdir/spawn hung under LaunchServices (`open`/Dock), so Rust now spawns the dsh CLI directly with current_dir = the bundled resource dir; (2) dsh's `tool/result` event carries the callId on `message.source.callId`/`toolCallId` and the output in NESTED content — the SDK read neither, so every bash/tool result was empty; it now resolves both and the app renders tool output. Verified end to end from the installed app: a Tic-Tac-Toe game written + 13 unit tests passing via bash.
 - `2026-08-15 01:20` — DeepLab sessions no longer see the legacy Open Lab Chinese skills (academic-translation, paper-review): the sidecar is spawned with `DSH_AGENTS_HOME` pointed at an app-private dir, so dsh stops scanning the user's `~/.agents/skills` pack (verified: session skill list now contains only the bundled English science skills).
@@ -20,7 +21,7 @@ Results and blockers only.
 - `appendTextPart` (background-agent result parts) — dsh has no synthetic-part append; surfaced live as a text update instead.
 - Runtime `addCustomProvider` / `addMcpServer` — dsh wires providers in settings namespaces and MCP servers in `cordis.yml`; the runtime `add*` calls throw a descriptive error. Connectors deploy via `runtime/skills` + setup.
 - OAuth authorize/callback flows — dsh v1 has no OAuth RPC; configure provider credentials in Settings.
-- Per-session model select persists per session (`session.selectModel`) rather than a global default; `setDefaultModel` applies to live sessions.
+- Model selection is session-scoped at runtime; `session.selectModel` also persists dsh's default for future agents, so DeepLab updates one selected session instead of rewriting every conversation.
 - `session.list` is unpaginated in dsh v1; `querySessions` pages in the client.
 
 ## Isolation leftovers (dsh-architecture migration backlog)
@@ -49,13 +50,3 @@ because `Request::parse` already consumed the handshake through its own
 BufReader, so the 101 is written manually and the socket is wrapped with
 `WebSocket::from_raw_socket`). CORS headers on every response let the cross-origin
 WebView fetch succeed (all privileged paths stay token-gated).
-
-## Retained-but-inactive OpenCode code
-
-`OpenCodeClient` and `runtime/opencode-profile`, `opencode_config.rs` helpers, and the
-goal/browser plugins remain as a retained reference runtime. The app drives exactly one
-runtime — the bundled DeepSeek Harness sidecar — so their config-seeding call sites were
-removed from the dsh spawn path, leaving a set of `dead_code` warnings in the Rust build;
-they are intentional and will be pruned once dsh is the only supported runtime. The ACP
-*server* direction (external editors driving DeepLab over the Agent Client Protocol) is
-kept: it is gateway functionality, not a runtime choice.

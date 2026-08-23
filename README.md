@@ -95,7 +95,7 @@ runtime-agnostic.
 
 ## Build from source
 
-Prerequisites: Node.js >= 22, pnpm, Rust toolchain, Tauri system deps.
+Prerequisites: Node.js ^22.19.0 or >=24.0.0, pnpm, Rust toolchain, Tauri system deps.
 
 ```bash
 git clone <this repo> DeepLab

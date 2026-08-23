@@ -1,6 +1,6 @@
 # Bundled DeepSeek Harness ACP automation server composition. This runtime is
 # fetched by scripts/dev/fetch-dsh-acp.sh (node_modules is git-ignored) and
-# bundled into the app like opencode / skills / acp-server.
+# bundled as an experimental dsh adapter alongside the main runtime and skills.
 #
 # The ACP demo boot expects DEEPSEEK_API_KEY in the environment; the app injects
 # it from the user's own OpenCode credential store when it spawns the launcher.

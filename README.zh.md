@@ -61,7 +61,7 @@ DeepLab 的智能体运行时是 DeepSeek Harness —— 一个开源的插件�
 
 ## 从源码构建
 
-前置：Node.js >= 22、pnpm、Rust 工具链、Tauri 系统依赖。
+前置：Node.js ^22.19.0 或 >=24.0.0、pnpm、Rust 工具链、Tauri 系统依赖。
 
 ```bash
 git clone <本仓库> DeepLab
