@@ -51,18 +51,39 @@ describe("Settings page strings (i18n)", () => {
     view.unmount();
   });
 
-  it("renders the model settings form with the Flash/Pro choice", async () => {
+  it("renders the models returned by the dsh provider directory", async () => {
     const original = useRuntimeStore.getState();
     let view: ReturnType<typeof renderAt> | undefined;
     try {
-      useRuntimeStore.setState({ status: "ready", defaultModel: "deepseek-official/deepseek-v4-flash" });
+      useRuntimeStore.setState({
+        status: "ready",
+        defaultModel: "lab-local/deepseek-v4-flash",
+        providers: [
+          {
+            id: "lab-local",
+            name: "Lab Local",
+            models: [
+              { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
+              { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
+            ],
+          },
+        ],
+      });
       view = renderAt("/settings/models");
-      expect(await screen.findByText("Flash")).toBeInTheDocument();
-      expect(screen.getByText("Pro")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Flash/ })).toHaveAttribute("aria-pressed", "true");
+      expect(await screen.findByText("Lab Local")).toBeInTheDocument();
+      expect(screen.getByText("DeepSeek V4 Flash")).toBeInTheDocument();
+      expect(screen.getByText("DeepSeek V4 Pro")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /DeepSeek V4 Flash/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
     } finally {
       view?.unmount();
-      useRuntimeStore.setState({ status: original.status, defaultModel: original.defaultModel });
+      useRuntimeStore.setState({
+        status: original.status,
+        defaultModel: original.defaultModel,
+        providers: original.providers,
+      });
     }
   });
 });

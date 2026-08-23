@@ -7,10 +7,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./mock-server": "./src/mockServer.ts",
-    "./acp": "./src/acp/index.ts",
-    "./acp/stdio": "./src/acp/stdio.ts",
-    "./acp/serve-stdio": "./src/acp/serve-stdio.ts"
+    "./mock-server": "./src/mockServer.ts"
   },
   "dependencies": {
     "@deeplab/shared": "workspace:*"

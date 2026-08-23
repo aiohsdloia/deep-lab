@@ -43,7 +43,6 @@
       "minimumSystemVersion": "13.0"
     },
     "resources": {
-      "../../../runtime/goal-plugin": "goal-plugin/",
       "../../../runtime/dsh": "dsh/",
       "../../../runtime/dsh-acp": "dsh-acp/",
       "../../../runtime/browser-plugin": "browser-plugin/",
@@ -55,7 +54,6 @@
       "../../../runtime/dsh-profile/agent": "profile/agent/",
       "../../../runtime/dsh-profile/command": "profile/command/",
       "../../../runtime/harness": "harness/",
-      "../../../runtime/acp-server": "acp-server/",
       "../../../examples/climate-trends": "examples/climate-trends/"
     },
     "icon": [

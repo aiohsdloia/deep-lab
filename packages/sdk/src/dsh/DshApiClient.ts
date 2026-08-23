@@ -8,9 +8,15 @@ import type {
   ServerRequest,
   ServerResponse,
 } from "./types";
+import type {
+  DshRpcCaller,
+  DshRpcMethod,
+  DshRpcPayload,
+  DshRpcValue,
+} from "./rpc-contract";
 
 /**
- * Transport client for the DeepSeek Harness `/api` HTTP+SSE gateway — the dsh
+ * Transport client for the DeepSeek Harness `/api` HTTP+WebSocket gateway. The dsh
  * client framework's wire protocol. Unary calls POST a `ClientRequest`
  * envelope to `/api/<method>` and read the echoed `ServerResponse`; the two
  * event streams ride WebSocket downlinks at `/api/events.mux` and
@@ -19,7 +25,7 @@ import type {
  *
  * `DshRuntime` owns session/event folding; this class is transport only.
  */
-export class DshApiClient {
+export class DshApiClient implements DshRpcCaller {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly WebSocketCtor: typeof WebSocket | undefined;
@@ -60,11 +66,11 @@ export class DshApiClient {
   }
 
   /** One unary call: POST /api/<method> with the ClientRequest envelope. */
-  async call<Value = unknown>(
-    method: string,
-    payload: Record<string, unknown> = {},
+  async call<K extends DshRpcMethod>(
+    method: K,
+    payload: DshRpcPayload<K>,
     signal?: AbortSignal,
-  ): Promise<Value> {
+  ): Promise<DshRpcValue<K>> {
     const message: ClientRequest = {
       type: "client-request",
       rpcId: this.mintRpcId(),
@@ -88,7 +94,7 @@ export class DshApiClient {
       const err = full.result.error;
       throw new DshRpcError(err.code, err.message, err.details);
     }
-    return full.result.value as Value;
+    return full.result.value as DshRpcValue<K>;
   }
 
   /** Answer an outstanding approval/question `ServerRequest` (echo its rpcId). */

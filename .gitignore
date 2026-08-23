@@ -68,8 +68,6 @@ videos/
 .agents/
 skills-lock.json
 
-# Build output: the ACP agent script an editor spawns (scripts/build-acp-server.mjs)
-runtime/acp-server/
 runtime/dsh-acp/node_modules/
 runtime/dsh-acp/.sessions/
 

@@ -23,4 +23,11 @@ describe("pinned DeepSeek Harness version", () => {
     const script = read("scripts/dev/fetch-dsh.sh");
     expect(script).toContain(`DSH_VERSION="\${DSH_VERSION:-${DSH_VERSION}}"`);
   });
+
+  it("matches the checked-in sidecar package manifest", () => {
+    const manifest = JSON.parse(read("runtime/dsh/package.json")) as {
+      dependencies?: Record<string, string>;
+    };
+    expect(manifest.dependencies?.["@deepseek-ai/dsh"]).toBe(DSH_VERSION);
+  });
 });

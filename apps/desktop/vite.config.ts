@@ -16,13 +16,6 @@ export default defineConfig({
       "@": r("./src"),
       "@deeplab/shared": r("../../packages/shared/src/index.ts"),
       "@deeplab/sdk/mock-server": r("../../packages/sdk/src/mockServer.ts"),
-      // Every ACP entry must precede the bare "@deeplab/sdk" prefix, which would
-      // otherwise swallow them. `acp/stdio` (spawns an agent) and
-      // `acp/serve-stdio` (IS the agent an editor spawns) are node-only;
-      // nothing in the webview bundle may import either.
-      "@deeplab/sdk/acp/serve-stdio": r("../../packages/sdk/src/acp/serve-stdio.ts"),
-      "@deeplab/sdk/acp/stdio": r("../../packages/sdk/src/acp/stdio.ts"),
-      "@deeplab/sdk/acp": r("../../packages/sdk/src/acp/index.ts"),
       "@deeplab/sdk": r("../../packages/sdk/src/index.ts"),
     },
   },

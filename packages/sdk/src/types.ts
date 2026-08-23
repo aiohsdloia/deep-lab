@@ -3,7 +3,7 @@ import type { RuntimeStatus, ToolCallStatus } from "@deeplab/shared";
 export type { RuntimeStatus, ToolCallStatus };
 
 /** Pinned DeepSeek Harness (dsh) release this client targets. */
-export const DSH_VERSION = "0.1.0-rc.6";
+export const DSH_VERSION = "0.1.1-rc.2";
 
 /** dsh web server defaults (`dsh --profile web`). */
 export const DEFAULT_DSH_URL = "http://127.0.0.1:3080";

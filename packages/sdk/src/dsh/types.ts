@@ -172,7 +172,7 @@ export interface AgentPresetSummary {
 }
 
 export interface ModelProviderGroup {
-  provider: string;
+  id: string;
   name: string;
   models: ModelCatalogModel[];
 }
@@ -188,7 +188,8 @@ export interface ModelCatalogModel {
 
 export interface SessionModels {
   groups: ModelProviderGroup[];
-  selected?: { provider: string; model: string; reasoningEffort?: string };
+  current: { provider: string; model: string; reasoningEffort?: string };
+  routable: boolean;
   failures: unknown[];
 }
 

@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { Check, KeyRound, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, KeyRound, Loader2, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getClient, useRuntimeStore } from "@/lib/runtime";
 import { cn } from "@/lib/cn";
 import { inputCls } from "./inputCls";
 import { Section } from "./Section";
+import { flattenModelOptions } from "./modelCatalog";
+import { loadModelPreferences, recordRecent, saveModelPreferences } from "./modelPreferences";
 
 /** The two DeepSeek models dsh exposes by default. */
 const DEEPSEEK_PROVIDER = "deepseek-official";
@@ -17,18 +19,27 @@ export const DEEPSEEK_MODELS = [
 export const DEEPSEEK_API_KEY_REF = "DEEPSEEK_API_KEY";
 
 /**
- * The whole model surface for DeepLab: one API key for the DeepSeek provider
- * plus a Flash/Pro model choice. dsh exposes exactly these two models, so a
- * full catalog browser would only ever show them — keep it a form instead.
+ * The primary model surface. The DeepSeek key remains first-class, but the
+ * selectable models come from dsh's live catalog so local OpenAI-compatible
+ * gateways and future dsh providers are not hidden behind a hardcoded list.
  */
 export function ModelSettingsCard() {
   const { t } = useTranslation(["settings", "common"]);
   const defaultModel = useRuntimeStore((s) => s.defaultModel);
+  const providers = useRuntimeStore((s) => s.providers);
   const [key, setKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [savingModel, setSavingModel] = useState<string | null>(null);
 
-  const currentModelId = DEEPSEEK_MODELS.find((m) => defaultModel?.endsWith(`/${m.id}`))?.id;
+  const options = useMemo(() => flattenModelOptions(providers), [providers]);
+  const byProvider = useMemo(
+    () =>
+      providers.map((provider) => ({
+        provider,
+        models: options.filter((model) => model.providerID === provider.id),
+      })),
+    [options, providers],
+  );
 
   const saveKey = async () => {
     const client = getClient();
@@ -43,11 +54,12 @@ export function ModelSettingsCard() {
     }
   };
 
-  const selectModel = async (modelId: string) => {
+  const selectModel = async (modelKey: string) => {
     if (savingModel) return;
-    setSavingModel(modelId);
+    setSavingModel(modelKey);
     try {
-      await useRuntimeStore.getState().setDefaultModel(`${DEEPSEEK_PROVIDER}/${modelId}`);
+      await useRuntimeStore.getState().setDefaultModel(modelKey);
+      saveModelPreferences(recordRecent(loadModelPreferences(), modelKey));
     } finally {
       setSavingModel(null);
     }
@@ -89,31 +101,64 @@ export function ModelSettingsCard() {
           </div>
         </div>
 
-        {/* Flash / Pro model choice */}
+        {/* Live dsh catalog: official, custom, and local providers all land here. */}
         <div className="px-4 py-3">
-          <div className="mb-2 text-[13px] font-medium text-text">{t("model.selectModel")}</div>
-          <div className="grid grid-cols-2 gap-2">
-            {DEEPSEEK_MODELS.map((m) => {
-              const active = currentModelId === m.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => void selectModel(m.id)}
-                  disabled={savingModel !== null}
-                  aria-pressed={active}
-                  className={cn(
-                    "flex flex-col items-start gap-0.5 rounded-input border px-3 py-2.5 text-left transition-colors",
-                    active
-                      ? "border-accent bg-surface-2"
-                      : "border-border hover:border-faint hover:bg-surface-2/60",
-                  )}
-                >
-                  <span className="text-[13px] font-medium text-text">{m.label}</span>
-                  <span className="font-mono text-[11px] text-muted">{m.id}</span>
-                </button>
-              );
-            })}
+          <div className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-text">
+            <Server size={13} />
+            <span>{t("model.selectModel")}</span>
           </div>
+          {options.length === 0 ? (
+            <p className="rounded-input bg-surface-2 px-3 py-2 text-[13px] text-muted">
+              {t("model.noModels")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {byProvider.map(({ provider, models }) => (
+                <div key={provider.id}>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-muted">
+                      {provider.name}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted/70">
+                      {provider.id}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {models.map((m) => {
+                      const active = defaultModel === m.key;
+                      return (
+                        <button
+                          key={m.key}
+                          onClick={() => void selectModel(m.key)}
+                          disabled={savingModel !== null}
+                          aria-pressed={active}
+                          className={cn(
+                            "flex min-h-16 flex-col items-start gap-0.5 rounded-input border px-3 py-2.5 text-left transition-colors",
+                            active
+                              ? "border-accent bg-surface-2"
+                              : "border-border hover:border-faint hover:bg-surface-2/60",
+                          )}
+                        >
+                          <span className="line-clamp-2 text-[13px] font-medium text-text">
+                            {m.modelName}
+                          </span>
+                          <span className="max-w-full truncate font-mono text-[11px] text-muted">
+                            {m.modelID}
+                          </span>
+                          {savingModel === m.key && (
+                            <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted">
+                              <Loader2 size={10} className="animate-spin" />
+                              {t("model.switching")}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </Section>

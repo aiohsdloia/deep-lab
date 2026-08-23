@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-DSH_VERSION="${DSH_VERSION:-0.1.0-rc.6}"
+DSH_VERSION="${DSH_VERSION:-0.1.1-rc.2}"
 DIR="runtime/dsh"
 
 if ! command -v node >/dev/null 2>&1; then

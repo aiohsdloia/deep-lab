@@ -11,7 +11,6 @@ import type {
   PromptFile,
   ProviderAuthMethod,
   ProviderCatalogEntry,
-  ProviderInfo,
   QuestionAskedEvent,
   QuestionItem,
   SessionMeta,
@@ -22,6 +21,9 @@ import type {
 import type { AgentRuntime } from "../runtime";
 import { BaseAgentRuntime } from "../base-runtime";
 import { DshApiClient, DshRpcError } from "./DshApiClient";
+import { DshGoalAdapter } from "./DshGoalAdapter";
+import { DshModelAdapter } from "./DshModelAdapter";
+import { DshSettingsAdapter } from "./DshSettingsAdapter";
 import type {
   ApprovalResponsePayload,
   ContentBlock,
@@ -30,6 +32,7 @@ import type {
   SessionEvent,
   SessionSummary,
 } from "./types";
+import type { PromptContentPart } from "./rpc-contract";
 
 /** Options for constructing a DshRuntime. */
 export interface DshRuntimeOptions {
@@ -100,6 +103,9 @@ function isSessionEventFrame(frame: MuxFrame): frame is { type: "session/event";
 export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   readonly baseUrl: string;
   private readonly api: DshApiClient;
+  private readonly goals: DshGoalAdapter;
+  private readonly models: DshModelAdapter;
+  private readonly settings: DshSettingsAdapter;
   private readonly directory?: string;
   private closed = false;
   private aborts = new Set<AbortController>();
@@ -134,6 +140,9 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       authHeader: options.authHeader,
       wsQueryToken: options.wsQueryToken,
     });
+    this.goals = new DshGoalAdapter(this.api);
+    this.models = new DshModelAdapter(this.api, () => this.anySessionId());
+    this.settings = new DshSettingsAdapter(this.api);
     this.directory = options.directory;
   }
 
@@ -284,6 +293,9 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         });
         break;
       }
+      case "session/projection":
+        if (frame.key === "goal") this.goals.observeProjection(frame.sessionId, frame.value);
+        break;
       default:
         break;
     }
@@ -470,7 +482,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   // ---- sessions ----
 
   async createSession(title?: string): Promise<string> {
-    const result = await this.api.call<{ sessionId: string }>("session.create", {
+    const result = await this.api.call("session.create", {
       ...(this.directory ? { cwd: this.directory } : {}),
     });
     if (title) {
@@ -481,33 +493,22 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   // ---- goals (dsh goal domain: auto-turn loop toward an objective) ----
 
-  /** The goal ref dsh returns from a create/mutation. */
-  private async goalRef(
-    method: "goal.create" | "goal.pause" | "goal.resume" | "goal.clear" | "goal.complete",
-    sessionId: string,
-    objective?: string,
-  ): Promise<void> {
-    const payload: Record<string, unknown> = { sessionId };
-    if (objective !== undefined) payload.objective = objective;
-    await this.api.call(method, payload);
-  }
-
   /** Start a goal: the agent loops turns toward `objective` until done. */
   async createGoal(sessionId: string, objective: string): Promise<void> {
-    await this.goalRef("goal.create", sessionId, objective);
+    await this.goals.create(sessionId, objective);
   }
   /** Pause / resume / clear / complete a session's goal. */
   async pauseGoal(sessionId: string): Promise<void> {
-    await this.goalRef("goal.pause", sessionId);
+    await this.goals.pause(sessionId);
   }
   async resumeGoal(sessionId: string): Promise<void> {
-    await this.goalRef("goal.resume", sessionId);
+    await this.goals.resume(sessionId);
   }
   async clearGoal(sessionId: string): Promise<void> {
-    await this.goalRef("goal.clear", sessionId);
+    await this.goals.clear(sessionId);
   }
   async completeGoal(sessionId: string): Promise<void> {
-    await this.goalRef("goal.complete", sessionId);
+    await this.goals.complete(sessionId);
   }
 
   async forkSession(sessionId: string, _beforeMessageId?: string): Promise<string> {
@@ -515,7 +516,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     // boundary is resolved best-effort by reading the tail history and finding
     // the last completed turn before the named message; without a match we fork
     // the whole conversation, which is the fallback Open Lab uses too.
-    const result = await this.api.call<{ sessionId: string }>("session.fork", { sessionId });
+    const result = await this.api.call("session.fork", { sessionId });
     return result.sessionId;
   }
 
@@ -523,10 +524,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
    *  state, so an archived conversation stays hidden across reconnects. */
   private async refreshArchived(): Promise<void> {
     try {
-      const result = await this.api.call<{ items?: unknown[]; archivedSessionIds?: string[] }>(
-        "workspace.list",
-      );
-      this.archivedIds = new Set(result.archivedSessionIds ?? []);
+      const result = await this.api.call("workspace.list", {});
+      this.archivedIds = new Set(result.archivedSessionIds);
     } catch {
       /* workspace.list is best-effort; keep the last known set */
     }
@@ -534,7 +533,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   private async loadSessions(): Promise<SessionMeta[]> {
     await this.refreshArchived();
-    const result = await this.api.call<{ items: SessionSummary[] }>("session.list");
+    const result = await this.api.call("session.list", {});
     const archivedAt = new Map<string, number>();
     for (const id of this.archivedIds) archivedAt.set(id, Date.now());
     return (result.items ?? []).map((s) => toSessionMeta(s, archivedAt));
@@ -549,10 +548,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   async querySessions(query: SessionQuery = {}): Promise<SessionPage> {
     if (query.search) {
-      const result = await this.api.call<{ items: Array<SessionSummary & { snippet?: string }> }>(
-        "session.search",
-        { query: query.search },
-      );
+      const result = await this.api.call("session.search", { query: query.search });
       const sessions = (result.items ?? []).map((s) => toSessionMeta(s));
       return { sessions, nextCursor: null };
     }
@@ -574,11 +570,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   async deleteSession(sessionId: string): Promise<void> {
     // dsh v1 exposes no session-deletion RPC; archiving removes it from the
     // active surface. The workspace list keeps it out of every future listing.
-    const result = await this.api.call<{ archivedSessionIds?: string[] }>(
-      "workspace.archiveSession",
-      { sessionId },
-    ).catch(() => undefined);
-    if (result?.archivedSessionIds) this.archivedIds = new Set(result.archivedSessionIds);
+    const result = await this.api.call("workspace.archiveSession", { sessionId }).catch(() => undefined);
+    if (result) this.archivedIds = new Set(result.archivedSessionIds);
     else this.archivedIds.add(sessionId);
   }
 
@@ -593,10 +586,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async getMessages(sessionId: string): Promise<HistoryMessage[]> {
-    const result = await this.api.call<{ events: Array<{ event: SessionEvent }> }>(
-      "session.history",
-      { sessionId },
-    );
+    const result = await this.api.call("session.history", { sessionId });
+    this.goals.observeProjection(sessionId, result.projections?.values.goal);
     return foldHistory(result.events?.map((e) => e.event) ?? []);
   }
 
@@ -626,8 +617,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     _clean?: boolean,
     files?: PromptFile[],
   ): Promise<void> {
-    const content: Array<{ type: "text" | "image"; text?: string; mediaType?: string; data?: string; name?: string }> =
-      [{ type: "text", text }];
+    const content: PromptContentPart[] = [{ type: "text", text }];
     for (const file of files ?? []) {
       const m = /^data:([^;,]+);base64,(.*)$/s.exec(file.url ?? "");
       if (m && /^image\//.test(m[1])) {
@@ -663,11 +653,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     // skill.list is session-scoped in dsh; use the most recent session (or
     // create one lazily in the workspace) so discovery works before a session.
     const sessionId = await this.anySessionId();
-    const result = await this.api.call<{ skills?: Array<{ name: string; description?: string }> }>(
-      "skill.list",
-      { sessionId },
-    );
-    return (result.skills ?? []).map((s) => ({ name: s.name, description: s.description ?? "" }));
+    const result = await this.api.call("skill.list", { sessionId });
+    return result.skills.map((s) => ({ name: s.name, description: s.description }));
   }
 
   /** The id of the newest live session, creating one lazily if none exists. */
@@ -679,10 +666,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async listAgents(): Promise<AgentInfo[]> {
-    const result = await this.api.call<{ presets?: Array<{ id: string; description?: string }> }>(
-      "agentPreset.list",
-    );
-    return (result.presets ?? []).map((a) => ({ name: a.id, description: a.description ?? "" }));
+    const result = await this.api.call("agentPreset.list", {});
+    return result.presets.map((a) => ({ name: a.id, description: a.description ?? "" }));
   }
 
   async listCommands(): Promise<CommandInfo[]> {
@@ -696,30 +681,11 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   // ---- model selection ----
 
   async getDefaultModel(): Promise<string | null> {
-    try {
-      const result = await this.api.call<{ groups?: Array<{ provider: string; models?: Array<{ id: string }> }> }>(
-        "llm.models",
-      );
-      const group = result.groups?.[0];
-      if (!group || !group.models?.length) return null;
-      return `${group.provider}/${group.models[0].id}`;
-    } catch {
-      return null;
-    }
+    return this.models.getDefaultModel();
   }
 
   async setDefaultModel(model: string): Promise<void> {
-    const [provider, ...rest] = model.split("/");
-    const modelId = rest.join("/");
-    if (!provider || !modelId) return;
-    // Model selection is per-session in dsh; record it for the next created
-    // session's lifetime by selecting on every live session we know of.
-    const sessions = await this.listSessions().catch(() => []);
-    for (const s of sessions) {
-      await this.api
-        .call("session.selectModel", { sessionId: s.id, provider, model: modelId })
-        .catch(() => undefined);
-    }
+    await this.models.setDefaultModel(model);
   }
 
   // ---- agent-driven execution ----
@@ -810,15 +776,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   // ---- provider / MCP surface (mapped onto dsh domains) ----
 
-  async listProviders(): Promise<ProviderInfo[]> {
-    const result = await this.api.call<{
-      groups?: Array<{ provider: string; name?: string; models?: Array<{ id: string; name?: string }> }>;
-    }>("llm.models");
-    return (result.groups ?? []).map((g) => ({
-      id: g.provider,
-      name: g.name ?? g.provider,
-      models: (g.models ?? []).map((m) => ({ id: m.id, name: m.name ?? m.id })),
-    }));
+  async listProviders() {
+    return this.models.listProviders();
   }
 
   async addCustomProvider(
@@ -850,9 +809,6 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     return {};
   }
 
-  /** The dsh DeepSeek provider reads its key from this credential ref. */
-  private readonly apiKeyRef = "DEEPSEEK_API_KEY";
-
   /**
    * Switch the dsh permission preset that NEW sessions start from: "unlimited"
    * = danger-full-access (full filesystem access, no approval prompts),
@@ -861,24 +817,11 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
    * it survives restarts and applies to every future session.
    */
   async setPermissionPreset(preset: "unlimited" | "restricted"): Promise<void> {
-    const defaultPreset = preset === "unlimited" ? "danger-full-access" : "workspace-write";
-    await this.api.call("settings.update", {
-      ns: "permission",
-      patch: { defaultPreset },
-    });
+    await this.settings.setPermissionPreset(preset);
   }
 
   async setProviderApiKey(providerID: string, key: string): Promise<void> {
-    // The dsh DeepSeek provider route (`deepseek-official`) resolves its bearer
-    // token from the `DEEPSEEK_API_KEY` credential ref. Store through the
-    // credentials domain so the value rides the app's secret store, never the
-    // session log or settings.
-    if (providerID === "deepseek-official" || providerID === "deepseek") {
-      await this.api.call("credentials.set", { ref: this.apiKeyRef, value: key });
-      return;
-    }
-    const ref = providerID.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY";
-    await this.api.call("credentials.set", { ref, value: key });
+    await this.settings.setProviderApiKey(providerID, key);
   }
 
   async getProviderRegion(_providerID: string): Promise<string | null> {
@@ -890,12 +833,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async removeProviderAuth(providerID: string): Promise<void> {
-    if (providerID === "deepseek-official" || providerID === "deepseek") {
-      await this.api.call("credentials.unset", { ref: this.apiKeyRef }).catch(() => undefined);
-      return;
-    }
-    const ref = providerID.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY";
-    await this.api.call("credentials.unset", { ref }).catch(() => undefined);
+    await this.settings.removeProviderAuth(providerID).catch(() => undefined);
   }
 
   async oauthAuthorize(
