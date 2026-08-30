@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-08-30 23:08` — Hardened the BCI trends demo with a versioned artifact contract, cross-platform verifier, tamper-negative tests, and DeepLab-owned run/provenance auditing; the deterministic workflow passes locally, while a real dsh model turn remains gated by the absence of provider credentials in this host's app-private dsh home.
 - `2026-08-30 18:21` — Added the dsh-native MCP composition bridge: desktop connector inventory now renders official Cordis plugin rows, credentials remain in dsh's managed store, Jupyter/browser/science connector surfaces are re-enabled, and sidecar reloads preserve the frontend gateway URL and token.
 - `2026-08-30 17:14` — Added a typed runtime capability contract for the pinned dsh composition and wired session/history/settings surfaces to it, so unsupported OpenCode-era actions (message revert/edit, session restore/delete/move, dynamic MCP/provider setup, and OAuth) are hidden and defensively blocked instead of appearing to work.
 - `2026-08-24 11:47` — OpenLab-to-DeepLab migration scope clarified: added a dsh-aware feature ownership report that separates DeepLab-owned product features from dsh-owned runtime state and mixed integration areas, with P0-P3 migration priorities in `docs/migration/OPENLAB-DSH-MIGRATION-SCOPE.md`.

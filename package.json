@@ -8,6 +8,7 @@
     "dev": "pnpm --filter @deeplab/desktop dev",
     "build": "pnpm --filter @deeplab/desktop build",
     "test": "pnpm --filter @deeplab/desktop test",
+    "test:bci-demo": "python scripts/dev/test_bci_demo.py",
     "test:dsh-mcp": "node --test scripts/dev/test-dsh-mcp.mjs",
     "typecheck": "pnpm --filter @deeplab/desktop typecheck",
     "lint": "pnpm --filter @deeplab/desktop lint"

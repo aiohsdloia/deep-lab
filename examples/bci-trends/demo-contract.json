@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "task": "2023-2026 brain-computer interface literature trends",
+  "source": {
+    "path": "data/raw/bci_literature_seed.csv",
+    "sha256": "ef262ce978c72f40b3cdb688211beab44eef6cb17cae04ce2971488440f081f8",
+    "columns": [
+      "year",
+      "title",
+      "topic",
+      "modality",
+      "application",
+      "keywords",
+      "citations"
+    ]
+  },
+  "summary": {
+    "path": "data/processed/corpus_summary.csv",
+    "columns": ["year", "paper_count", "total_citations", "mean_citations"],
+    "rows": [
+      ["2023", "3", "100", "33.33"],
+      ["2024", "4", "203", "50.75"],
+      ["2025", "4", "210", "52.50"],
+      ["2026", "3", "73", "24.33"]
+    ]
+  },
+  "figures": {
+    "paths": [
+      "figures/year_trend.png",
+      "figures/topic_clusters.png",
+      "figures/top_keywords.png"
+    ],
+    "minimumWidth": 640,
+    "minimumHeight": 360,
+    "minimumBytes": 500
+  },
+  "report": {
+    "path": "reports/report.md",
+    "requiredHeadings": ["Method", "Data", "Findings", "Limitations"],
+    "requiredFacts": ["14", "586", "2023", "2026"]
+  },
+  "requiredFiles": [
+    "plan.md",
+    "scripts/analyze.py",
+    "data/processed/corpus_summary.csv",
+    "figures/year_trend.png",
+    "figures/topic_clusters.png",
+    "figures/top_keywords.png",
+    "reports/report.md"
+  ],
+  "verificationOutput": "reviews/review.md",
+  "platformRecords": {
+    "runs": ".deeplab/runs.jsonl",
+    "provenance": ".deeplab/provenance.jsonl",
+    "commandContains": "scripts/analyze.py",
+    "outputPaths": [
+      "data/processed/corpus_summary.csv",
+      "figures/year_trend.png",
+      "figures/topic_clusters.png",
+      "figures/top_keywords.png",
+      "reports/report.md"
+    ]
+  }
+}

@@ -29,12 +29,14 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
     icon: <BrainCircuit size={17} strokeWidth={1.75} />,
     example: "bci-trends",
     prompt:
-      "在这个内置的 bci-trends 工作区中完成一个端到端科研演示：先读取 README.md 和 " +
-      "data/raw/bci_literature_seed.csv，确认任务是分析 2023–2026 年脑机接口文献趋势；然后编写 " +
-      "scripts/analyze.py，用本地 CSV 生成 data/processed/corpus_summary.csv、figures/year_trend.png、" +
-      "figures/topic_clusters.png、figures/top_keywords.png 和 reports/report.md。报告必须说明方法、数据来源、" +
-      "关键趋势、局限性，并且每个数字都必须来自脚本实际计算。最后写入 provenance.jsonl，记录输入文件、脚本、" +
-      "输出文件和运行命令。不要联网，不要编造外部论文，只使用工作区已有数据。",
+      "Complete the built-in bci-trends workflow using only this workspace. Read README.md, " +
+      "demo-contract.json, and data/raw/bci_literature_seed.csv first. Write plan.md and " +
+      "scripts/analyze.py, then generate the contracted summary, three PNG figures, and " +
+      "reports/report.md. Every numeric claim must come from the script's actual results. " +
+      "Run `python scripts/analyze.py` as its own command so DeepLab records its outputs. " +
+      "After that command finishes, run `python verify.py` and fix the work until it passes. " +
+      "Do not access the network, invent papers, or create/edit anything under .deeplab; " +
+      "DeepLab owns run history and provenance for the dsh tool events.",
   },
   {
     id: "build-bio-tool",

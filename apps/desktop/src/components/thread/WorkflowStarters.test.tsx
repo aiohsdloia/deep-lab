@@ -23,7 +23,10 @@ describe("WorkflowStarters", () => {
     await userEvent.click(screen.getByText("Run the BCI trends demo"));
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick.mock.calls[0][0]).toContain("bci-trends");
-    expect(onPick.mock.calls[0][0]).toContain("provenance.jsonl");
+    expect(onPick.mock.calls[0][0]).toContain("python scripts/analyze.py");
+    expect(onPick.mock.calls[0][0]).toContain("run `python verify.py`");
+    expect(onPick.mock.calls[0][0]).toContain("Do not access the network");
+    expect(onPick.mock.calls[0][0]).toContain("create/edit anything under .deeplab");
     expect(onPick.mock.calls[0][1]).toMatchObject({ id: "bci-trends", example: "bci-trends" });
   });
 
