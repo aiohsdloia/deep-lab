@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-08-30 17:14` — Added a typed runtime capability contract for the pinned dsh composition and wired session/history/settings surfaces to it, so unsupported OpenCode-era actions (message revert/edit, session restore/delete/move, dynamic MCP/provider setup, and OAuth) are hidden and defensively blocked instead of appearing to work.
 - `2026-08-24 11:47` — OpenLab-to-DeepLab migration scope clarified: added a dsh-aware feature ownership report that separates DeepLab-owned product features from dsh-owned runtime state and mixed integration areas, with P0-P3 migration priorities in `docs/migration/OPENLAB-DSH-MIGRATION-SCOPE.md`.
 - `2026-08-24 00:59` — Direct harness inspection completed: separated `runtime/harness` as a workspace rule/memory scaffold from the real bundled dsh sidecar and SDK adapter layer, and recorded the recommendation to keep Open Lab's research-workbench product layer while continuing the dsh-native runtime migration in `docs/migration/HARNESS-INSPECTION-REPORT.md`.
 - `2026-08-24 00:12` — Week-two direction changed to a decisive dsh-backed demo: added a one-click BCI literature trends starter that installs the bundled `bci-trends` workspace, switches the draft into it, and prompts the agent to produce script, figures, processed data, report, and provenance from a local seed corpus; lab-hosted model serving remains a later provider-switch milestone, not a prerequisite for the demo.

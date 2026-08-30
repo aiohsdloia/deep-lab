@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRuntimeStore } from "@/lib/runtime";
 import { renderAt } from "@/test/render";
+import { DSH_RUNTIME_CAPABILITIES } from "@deeplab/sdk";
 
 const setSessionArchived = vi.fn(async () => true);
 const moveSessionToWorkspace = vi.fn(async () => true);
@@ -20,6 +21,11 @@ beforeEach(() => {
     m.mockClear(),
   );
   useRuntimeStore.setState({
+    capabilities: {
+      ...DSH_RUNTIME_CAPABILITIES,
+      sessionMove: true,
+      sessionDelete: true,
+    },
     setSessionArchived,
     moveSessionToWorkspace,
     renameSession,
@@ -31,7 +37,13 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => useRuntimeStore.setState({ sessions: [], projects: [] }));
+afterEach(() =>
+  useRuntimeStore.setState({
+    sessions: [],
+    projects: [],
+    capabilities: DSH_RUNTIME_CAPABILITIES,
+  }),
+);
 
 describe("sidebar right-click menus", () => {
   it("a session offers session actions, not a link menu", async () => {

@@ -13,6 +13,7 @@ import type {
   ProviderCatalogEntry,
   QuestionAskedEvent,
   QuestionItem,
+  RuntimeCapabilities,
   SessionMeta,
   SessionPage,
   SessionQuery,
@@ -33,6 +34,32 @@ import type {
   SessionSummary,
 } from "./types";
 import type { PromptContentPart } from "./rpc-contract";
+
+/**
+ * Capabilities of DeepLab's pinned dsh adapter/profile composition.
+ * Unsupported OpenCode-era operations remain false until a real dsh-native
+ * implementation exists; throwing methods alone are not product support.
+ */
+export const DSH_RUNTIME_CAPABILITIES: Readonly<RuntimeCapabilities> = Object.freeze({
+  sessionFork: true,
+  sessionArchive: true,
+  sessionRestore: false,
+  sessionDelete: false,
+  sessionMove: false,
+  sessionMessageRevert: false,
+  syntheticMessageParts: false,
+  skills: true,
+  agents: true,
+  commands: true,
+  interactiveQuestions: true,
+  interactivePermissions: true,
+  modelSelection: true,
+  credentials: true,
+  goals: true,
+  dynamicMcpConfiguration: false,
+  dynamicProviderConfiguration: false,
+  oauthAuthentication: false,
+});
 
 /** Options for constructing a DshRuntime. */
 export interface DshRuntimeOptions {
@@ -144,6 +171,10 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     this.models = new DshModelAdapter(this.api, () => this.anySessionId());
     this.settings = new DshSettingsAdapter(this.api);
     this.directory = options.directory;
+  }
+
+  getCapabilities(): Readonly<RuntimeCapabilities> {
+    return DSH_RUNTIME_CAPABILITIES;
   }
 
   /** Set the workspace directory new sessions are created in (move). */

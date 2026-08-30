@@ -30,7 +30,7 @@ describe("Settings page strings (i18n)", () => {
     expect(screen.getByText("available in the desktop app")).toBeInTheDocument();
     // The sidebar became the settings navigation with a way back to the app.
     expect(screen.getByRole("button", { name: "Back to app" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Connectors" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Connectors" })).not.toBeInTheDocument();
   });
 
   it("renders each section's own title and disconnected-runtime prompt", async () => {

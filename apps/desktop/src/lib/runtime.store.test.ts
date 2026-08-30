@@ -109,7 +109,19 @@ vi.mock("./kernel", () => ({ kernelReset: mocks.kernelReset }));
 vi.mock("./systemNotification", () => ({
   notifyPermissionRequest: mocks.notifyPermissionRequest,
 }));
-vi.mock("@deeplab/sdk", () => {
+vi.mock("@deeplab/sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@deeplab/sdk")>();
+  const capabilities = {
+    ...actual.DSH_RUNTIME_CAPABILITIES,
+    sessionRestore: true,
+    sessionDelete: true,
+    sessionMove: true,
+    sessionMessageRevert: true,
+    syntheticMessageParts: true,
+    dynamicMcpConfiguration: true,
+    dynamicProviderConfiguration: true,
+    oauthAuthentication: true,
+  };
   class DshRuntime {
     private statusCb: (s: string) => void = () => {};
     /** The real client keeps its status (BaseAgentRuntime); the store reads it
@@ -120,6 +132,9 @@ vi.mock("@deeplab/sdk", () => {
     }
     getStatus() {
       return this.status;
+    }
+    getCapabilities() {
+      return capabilities;
     }
     onStatus(cb: (s: string) => void) {
       const wrapped = (s: string) => {
@@ -276,7 +291,7 @@ vi.mock("@deeplab/sdk", () => {
   // permission (404) from a reply that genuinely failed.
   const isApiStatus = (err: unknown, status: number) =>
     err instanceof Error && (err as { status?: unknown }).status === status;
-  return { DshRuntime, isApiStatus, DEFAULT_DSH_URL: "http://127.0.0.1:3080" };
+  return { ...actual, DshRuntime, isApiStatus };
 });
 
 import type { ArtifactBlock } from "@deeplab/shared";

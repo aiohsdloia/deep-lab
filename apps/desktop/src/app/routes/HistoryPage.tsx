@@ -60,6 +60,7 @@ export function HistoryPage() {
   const projects = useRuntimeStore((s) => s.projects);
   const webReadOnly = useRuntimeStore((s) => s.webReadOnly);
   const status = useRuntimeStore((s) => s.status);
+  const capabilities = useRuntimeStore((s) => s.capabilities);
   const renameSession = useRuntimeStore((s) => s.renameSession);
   const moveSessionToWorkspace = useRuntimeStore((s) => s.moveSessionToWorkspace);
   const setSessionArchived = useRuntimeStore((s) => s.setSessionArchived);
@@ -365,64 +366,71 @@ export function HistoryPage() {
                                 <Pencil size={14} className="shrink-0 text-muted" />
                                 {t("history.rename")}
                               </DropdownMenu.Item>
-                              <DropdownMenu.Sub>
-                                <DropdownMenu.SubTrigger className="flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 outline-none data-[highlighted]:bg-surface-2 data-[state=open]:bg-surface-2">
-                                  <FolderInput size={14} className="shrink-0 text-muted" />
-                                  {t("history.moveTo")}
-                                </DropdownMenu.SubTrigger>
-                                <DropdownMenu.Portal>
-                                  <DropdownMenu.SubContent
-                                    sideOffset={4}
-                                    className="z-50 max-h-[320px] min-w-[190px] overflow-y-auto rounded-card border border-border bg-surface p-1 text-[13px] text-text shadow-pop"
-                                  >
-                                    {projects.length === 0 && (
-                                      <div className="px-2 py-1.5 text-muted">
-                                        {t("history.moveToNone")}
-                                      </div>
-                                    )}
-                                    {projects.map((p) => (
-                                      <DropdownMenu.Item
-                                        key={p.id}
-                                        disabled={samePath(p.path, s.directory)}
-                                        onSelect={() => {
-                                          patchRow(s.id, { directory: p.path });
-                                          void moveSessionToWorkspace(s.id, p.path);
-                                        }}
-                                        className={cn(
-                                          "flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 outline-none data-[highlighted]:bg-surface-2",
-                                          samePath(p.path, s.directory) &&
-                                            "cursor-default text-muted opacity-60",
-                                        )}
-                                      >
-                                        <span className="truncate">{p.name}</span>
-                                      </DropdownMenu.Item>
-                                    ))}
-                                  </DropdownMenu.SubContent>
-                                </DropdownMenu.Portal>
-                              </DropdownMenu.Sub>
-                              <DropdownMenu.Item
-                                onSelect={() => void toggleArchived(s)}
-                                className="flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 outline-none data-[highlighted]:bg-surface-2"
-                              >
-                                {s.archived == null ? (
-                                  <>
-                                    <Archive size={14} className="shrink-0 text-muted" />
-                                    {t("history.archive")}
-                                  </>
-                                ) : (
-                                  <>
-                                    <ArchiveRestore size={14} className="shrink-0 text-muted" />
-                                    {t("history.restore")}
-                                  </>
-                                )}
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item
-                                onSelect={() => setPendingDelete(s)}
-                                className="flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 text-error outline-none data-[highlighted]:bg-surface-2"
-                              >
-                                <Trash2 size={14} className="shrink-0" />
-                                {t("confirmDelete.deleteAction")}
-                              </DropdownMenu.Item>
+                              {capabilities.sessionMove && (
+                                <DropdownMenu.Sub>
+                                  <DropdownMenu.SubTrigger className="flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 outline-none data-[highlighted]:bg-surface-2 data-[state=open]:bg-surface-2">
+                                    <FolderInput size={14} className="shrink-0 text-muted" />
+                                    {t("history.moveTo")}
+                                  </DropdownMenu.SubTrigger>
+                                  <DropdownMenu.Portal>
+                                    <DropdownMenu.SubContent
+                                      sideOffset={4}
+                                      className="z-50 max-h-[320px] min-w-[190px] overflow-y-auto rounded-card border border-border bg-surface p-1 text-[13px] text-text shadow-pop"
+                                    >
+                                      {projects.length === 0 && (
+                                        <div className="px-2 py-1.5 text-muted">
+                                          {t("history.moveToNone")}
+                                        </div>
+                                      )}
+                                      {projects.map((p) => (
+                                        <DropdownMenu.Item
+                                          key={p.id}
+                                          disabled={samePath(p.path, s.directory)}
+                                          onSelect={() => {
+                                            patchRow(s.id, { directory: p.path });
+                                            void moveSessionToWorkspace(s.id, p.path);
+                                          }}
+                                          className={cn(
+                                            "flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 outline-none data-[highlighted]:bg-surface-2",
+                                            samePath(p.path, s.directory) &&
+                                              "cursor-default text-muted opacity-60",
+                                          )}
+                                        >
+                                          <span className="truncate">{p.name}</span>
+                                        </DropdownMenu.Item>
+                                      ))}
+                                    </DropdownMenu.SubContent>
+                                  </DropdownMenu.Portal>
+                                </DropdownMenu.Sub>
+                              )}
+                              {((s.archived == null && capabilities.sessionArchive) ||
+                                (s.archived != null && capabilities.sessionRestore)) && (
+                                <DropdownMenu.Item
+                                  onSelect={() => void toggleArchived(s)}
+                                  className="flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 outline-none data-[highlighted]:bg-surface-2"
+                                >
+                                  {s.archived == null ? (
+                                    <>
+                                      <Archive size={14} className="shrink-0 text-muted" />
+                                      {t("history.archive")}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ArchiveRestore size={14} className="shrink-0 text-muted" />
+                                      {t("history.restore")}
+                                    </>
+                                  )}
+                                </DropdownMenu.Item>
+                              )}
+                              {capabilities.sessionDelete && (
+                                <DropdownMenu.Item
+                                  onSelect={() => setPendingDelete(s)}
+                                  className="flex cursor-pointer items-center gap-2 rounded-input px-2 py-1.5 text-error outline-none data-[highlighted]:bg-surface-2"
+                                >
+                                  <Trash2 size={14} className="shrink-0" />
+                                  {t("confirmDelete.deleteAction")}
+                                </DropdownMenu.Item>
+                              )}
                             </DropdownMenu.Content>
                           </DropdownMenu.Portal>
                         </DropdownMenu.Root>

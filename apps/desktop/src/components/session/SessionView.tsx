@@ -158,6 +158,7 @@ export function SessionView({
   const cancelAutoReview = useRuntimeStore((s) => s.cancelAutoReview);
   const editMessage = useRuntimeStore((s) => s.editMessage);
   const revertMessage = useRuntimeStore((s) => s.revertMessage);
+  const canRevertMessages = useRuntimeStore((s) => s.capabilities.sessionMessageRevert);
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
   const approvalMode = useRuntimeStore((s) => s.approvalMode);
   const setApprovalMode = useRuntimeStore((s) => s.setApprovalMode);
@@ -249,12 +250,26 @@ export function SessionView({
           `On the figure ${title}, at (${a.x.toFixed(0)}%, ${a.y.toFixed(0)}%): ${a.note}`,
           sid ?? undefined,
         ),
-      onEditMessage: (id, text) => editMessage(id, text, sid ?? undefined),
-      onRevertMessage: async (id, text) => {
-        if (await revertMessage(id, sid ?? undefined)) setComposerDraft(text);
-      },
+      ...(canRevertMessages
+        ? {
+            onEditMessage: (id: string, text: string) => editMessage(id, text, sid ?? undefined),
+            onRevertMessage: async (id: string, text: string) => {
+              if (await revertMessage(id, sid ?? undefined)) setComposerDraft(text);
+            },
+          }
+        : {}),
     }),
-    [openArtifact, sendPrompt, editMessage, revertMessage, setComposerDraft, sid, pinEphemeral, revealFile],
+    [
+      openArtifact,
+      sendPrompt,
+      editMessage,
+      revertMessage,
+      setComposerDraft,
+      sid,
+      pinEphemeral,
+      revealFile,
+      canRevertMessages,
+    ],
   );
   const onEvaluate = (expr: string) =>
     void sendPrompt(`Evaluate in the notebook kernel:\n\`\`\`python\n${expr}\n\`\`\``, sid ?? undefined);

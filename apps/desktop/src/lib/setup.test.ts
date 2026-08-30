@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   resolveSetup: (() => {}) as () => void,
   setupJupyter: vi.fn(),
   setupScienceMcp: vi.fn(async () => "/env/bin/python"),
+  dynamicMcpConfiguration: true,
 }));
 
 mocks.setupJupyter.mockImplementation(
@@ -28,7 +29,11 @@ mocks.setupJupyter.mockImplementation(
 vi.mock("./runtime", () => ({
   getClient: () => ({ addMcpServer: mocks.addMcpServer }),
   useRuntimeStore: {
-    getState: () => ({ loadCatalog: mocks.loadCatalog, connectRetry: mocks.connectRetry }),
+    getState: () => ({
+      loadCatalog: mocks.loadCatalog,
+      connectRetry: mocks.connectRetry,
+      capabilities: { dynamicMcpConfiguration: mocks.dynamicMcpConfiguration },
+    }),
   },
 }));
 vi.mock("./tauri", () => ({
@@ -59,6 +64,7 @@ import { useSetupStore } from "./setup";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.dynamicMcpConfiguration = true;
   mocks.setupJupyter.mockImplementation(
     () => new Promise<void>((r) => (mocks.resolveSetup = () => r())),
   );
@@ -66,6 +72,19 @@ beforeEach(() => {
 });
 
 describe("setup store", () => {
+  it("does not provision anything when the runtime cannot register MCP servers", async () => {
+    mocks.dynamicMcpConfiguration = false;
+
+    await useSetupStore.getState().enableJupyter();
+    await useSetupStore.getState().enableConnector("papers", "key123");
+    await useSetupStore.getState().enableBrowser({ headed: false });
+
+    expect(mocks.setupJupyter).not.toHaveBeenCalled();
+    expect(mocks.setupScienceMcp).not.toHaveBeenCalled();
+    expect(mocks.agentBrowserBin).not.toHaveBeenCalled();
+    expect(mocks.addMcpServer).not.toHaveBeenCalled();
+  });
+
   it("marks busy while provisioning Jupyter and clears + bumps generation after", async () => {
     const gen0 = useSetupStore.getState().generation;
     const run = useSetupStore.getState().enableJupyter();

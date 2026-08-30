@@ -25,7 +25,8 @@ vi.mock("@/lib/tauri", () => ({
 }));
 vi.mock("@/lib/kernel", () => ({ kernelReset: async () => {} }));
 // switchWorkspace reconnects after a pick — give it a client that connects instantly.
-vi.mock("@deeplab/sdk", () => {
+vi.mock("@deeplab/sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@deeplab/sdk")>();
   class DshRuntime {
     private statusCb: (s: string) => void = () => {};
     onStatus(cb: (s: string) => void) {
@@ -37,6 +38,9 @@ vi.mock("@deeplab/sdk", () => {
     }
     getStatus() {
       return "ready";
+    }
+    getCapabilities() {
+      return actual.DSH_RUNTIME_CAPABILITIES;
     }
     async listSessions() {
       return [];
@@ -52,7 +56,7 @@ vi.mock("@deeplab/sdk", () => {
     }
     close() {}
   }
-  return { DshRuntime, DEFAULT_DSH_URL: "http://127.0.0.1:3080" };
+  return { ...actual, DshRuntime };
 });
 
 describe("WorkspaceChip", () => {

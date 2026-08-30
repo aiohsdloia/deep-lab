@@ -138,6 +138,7 @@ export function Sidebar() {
   const sessionParents = useRuntimeStore((s) => s.sessionParents);
   const interruptedSessions = useRuntimeStore((s) => s.interruptedSessions);
   const webReadOnly = useRuntimeStore((s) => s.webReadOnly);
+  const capabilities = useRuntimeStore((s) => s.capabilities);
   const activeRoots = new Set(
     Object.keys(runningSessions).map((sid) => rootSessionOf(sessionParents, sid)),
   );
@@ -438,36 +439,44 @@ export function Sidebar() {
           >
             {t("history.rename")}
           </ContextMenuItem>
-          <ContextMenuSub icon={<FolderInput size={14} />} label={t("history.moveTo")}>
-            {projects.length === 0 && (
-              <ContextMenuEmpty>{t("history.moveToNone")}</ContextMenuEmpty>
-            )}
-            {projects.map((p) => (
+          {capabilities.sessionMove && (
+            <ContextMenuSub icon={<FolderInput size={14} />} label={t("history.moveTo")}>
+              {projects.length === 0 && (
+                <ContextMenuEmpty>{t("history.moveToNone")}</ContextMenuEmpty>
+              )}
+              {projects.map((p) => (
+                <ContextMenuItem
+                  key={p.id}
+                  disabled={samePath(p.path, sessionDirOf(row.id))}
+                  onSelect={() => void moveSessionToWorkspace(row.id, p.path)}
+                >
+                  {p.name}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSub>
+          )}
+          {capabilities.sessionArchive && (
+            <ContextMenuItem
+              icon={<Archive size={14} />}
+              disabled={webReadOnly}
+              onSelect={() => void setSessionArchived(row.id, true)}
+            >
+              {t("history.archive")}
+            </ContextMenuItem>
+          )}
+          {capabilities.sessionDelete && (
+            <>
+              <ContextMenuSeparator />
               <ContextMenuItem
-                key={p.id}
-                disabled={samePath(p.path, sessionDirOf(row.id))}
-                onSelect={() => void moveSessionToWorkspace(row.id, p.path)}
+                icon={<Trash2 size={14} />}
+                danger
+                disabled={webReadOnly}
+                onSelect={() => setPendingDelete(row)}
               >
-                {p.name}
+                {t("confirmDelete.deleteAction")}
               </ContextMenuItem>
-            ))}
-          </ContextMenuSub>
-          <ContextMenuItem
-            icon={<Archive size={14} />}
-            disabled={webReadOnly}
-            onSelect={() => void setSessionArchived(row.id, true)}
-          >
-            {t("history.archive")}
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            icon={<Trash2 size={14} />}
-            danger
-            disabled={webReadOnly}
-            onSelect={() => setPendingDelete(row)}
-          >
-            {t("confirmDelete.deleteAction")}
-          </ContextMenuItem>
+            </>
+          )}
         </>
       }
     >
@@ -546,13 +555,15 @@ export function Sidebar() {
           {row.title}
         </span>
       </NavLink>
-      <button
-        onClick={() => setPendingDelete(row)}
-        aria-label={t("history.deleteAria", { title: row.title })}
-        className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded p-1 text-muted hover:bg-border hover:text-error group-hover:block"
-      >
-        <Trash2 size={13} />
-      </button>
+      {capabilities.sessionDelete && (
+        <button
+          onClick={() => setPendingDelete(row)}
+          aria-label={t("history.deleteAria", { title: row.title })}
+          className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded p-1 text-muted hover:bg-border hover:text-error group-hover:block"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
     </div>
     </ContextMenu>
     );
@@ -600,7 +611,7 @@ export function Sidebar() {
               </button>
             </div>
             <nav className="flex flex-col gap-0.5 px-3">
-              {visibleSections(isGatewayWeb).map(({ key, icon: Icon }) => (
+              {visibleSections(isGatewayWeb, capabilities).map(({ key, icon: Icon }) => (
                 <NavLink
                   key={key}
                   to={`/settings/${key}`}

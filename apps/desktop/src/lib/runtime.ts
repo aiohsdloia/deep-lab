@@ -2,12 +2,14 @@ import { create } from "zustand";
 import {
   DshRuntime,
   DEFAULT_DSH_URL,
+  NO_RUNTIME_CAPABILITIES,
   isApiStatus,
   type AgentInfo,
   type AgentRuntime,
   type CommandInfo,
   type HistoryMessage,
   type RuntimeEvent,
+  type RuntimeCapabilities,
   type PermissionAskedEvent,
   type PermissionReply,
   type ProviderInfo,
@@ -320,6 +322,8 @@ export interface PaneState {
 
 interface RuntimeState {
   status: RuntimeStatus;
+  /** Product controls enabled by the active runtime adapter/profile. */
+  capabilities: Readonly<RuntimeCapabilities>;
   serverUrl: string;
   sessions: SessionMeta[];
   currentId: string | null;
@@ -1888,6 +1892,7 @@ function modelForTurn(
 
 export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   status: "offline",
+  capabilities: NO_RUNTIME_CAPABILITIES,
   serverUrl: initialUrl(),
   sessions: [],
   currentId: null,
@@ -2390,6 +2395,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     dshClient = oc;
     client = oc;
     const c: AgentRuntime = oc;
+    set({ capabilities: c.getCapabilities() });
     // Background streams reuse the same sidecar; the foreground now streams
     // this folder, so drop any background stream that was covering it (avoid a
     // double fold of the same events).
@@ -3850,11 +3856,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   editMessage: async (messageID, newText, sessionId) => {
+    if (!get().capabilities.sessionMessageRevert) return;
     if (await revertToMessage(set, get, messageID, sessionId))
       await get().sendPrompt(newText, sessionId);
   },
 
-  revertMessage: async (messageID, sessionId) => revertToMessage(set, get, messageID, sessionId),
+  revertMessage: async (messageID, sessionId) =>
+    get().capabilities.sessionMessageRevert
+      ? revertToMessage(set, get, messageID, sessionId)
+      : false,
 
   reconcileRunning: async () => {
     const c = client;
@@ -3894,6 +3904,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   deleteSession: async (id) => {
+    if (!get().capabilities.sessionDelete) return;
     delete sessionDirOverrides[id];
     saveSessionDirs();
     if (client) {
@@ -3961,6 +3972,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   moveSessionToWorkspace: async (id, directory) => {
+    if (!get().capabilities.sessionMove) return false;
     const oc = getClient();
     // Re-homing a session is dsh control-plane surface, not part of the
     // runtime-agnostic port — go through the concrete client.
@@ -3997,6 +4009,9 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
 
   setSessionArchived: async (id, archived) => {
+    if (archived ? !get().capabilities.sessionArchive : !get().capabilities.sessionRestore) {
+      return false;
+    }
     if (!client) return false;
     try {
       await client.setSessionArchived(id, archived);

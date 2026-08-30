@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
+import type { RuntimeCapabilities } from "@deeplab/sdk";
 
 /** Settings sections — the sidebar nav and `/settings/:section` routes.
  *  Labels come from the settings i18n namespace under `nav.<key>`.
@@ -31,8 +32,21 @@ export const SETTINGS_SECTIONS = [
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["key"];
 
 /** Sections to show: all on desktop; drop `desktopOnly` ones in the web client. */
-export function visibleSections(isWeb: boolean) {
-  return isWeb ? SETTINGS_SECTIONS.filter((s) => !("desktopOnly" in s && s.desktopOnly)) : SETTINGS_SECTIONS;
+export function visibleSections(
+  isWeb: boolean,
+  capabilities?: Readonly<RuntimeCapabilities>,
+) {
+  return SETTINGS_SECTIONS.filter((section) => {
+    if (isWeb && "desktopOnly" in section && section.desktopOnly) return false;
+    if (
+      capabilities &&
+      (section.key === "connectors" || section.key === "browser") &&
+      !capabilities.dynamicMcpConfiguration
+    ) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function resolveSection(raw: string | undefined): SettingsSection {

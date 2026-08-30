@@ -7,6 +7,7 @@ import type {
   PermissionReply,
   PromptFile,
   QuestionAskedEvent,
+  RuntimeCapabilities,
   RuntimeStatus,
   SessionMeta,
   SessionPage,
@@ -38,6 +39,9 @@ export interface AgentRuntime {
   getStatus(): RuntimeStatus;
   onStatus(listener: (status: RuntimeStatus) => void): () => void;
   onEvent(listener: (event: RuntimeEvent) => void): () => void;
+
+  /** Stable abilities of the current adapter/profile composition. */
+  getCapabilities(): Readonly<RuntimeCapabilities>;
 
   // ---- sessions (a conversation) ----
   /** Create a session, optionally giving the runtime a concise initial title. */

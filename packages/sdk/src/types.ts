@@ -8,6 +8,56 @@ export const DSH_VERSION = "0.1.1-rc.2";
 /** dsh web server defaults (`dsh --profile web`). */
 export const DEFAULT_DSH_URL = "http://127.0.0.1:3080";
 
+/**
+ * Product-facing abilities exposed by the active runtime composition.
+ *
+ * These flags describe what DeepLab can safely offer through its current
+ * adapter/profile combination, not every feature the upstream runtime may
+ * contain. UI code uses them to avoid presenting controls that can only fail.
+ */
+export interface RuntimeCapabilities {
+  sessionFork: boolean;
+  sessionArchive: boolean;
+  sessionRestore: boolean;
+  sessionDelete: boolean;
+  sessionMove: boolean;
+  sessionMessageRevert: boolean;
+  syntheticMessageParts: boolean;
+  skills: boolean;
+  agents: boolean;
+  commands: boolean;
+  interactiveQuestions: boolean;
+  interactivePermissions: boolean;
+  modelSelection: boolean;
+  credentials: boolean;
+  goals: boolean;
+  dynamicMcpConfiguration: boolean;
+  dynamicProviderConfiguration: boolean;
+  oauthAuthentication: boolean;
+}
+
+/** Safe default before a runtime has been selected or connected. */
+export const NO_RUNTIME_CAPABILITIES: Readonly<RuntimeCapabilities> = Object.freeze({
+  sessionFork: false,
+  sessionArchive: false,
+  sessionRestore: false,
+  sessionDelete: false,
+  sessionMove: false,
+  sessionMessageRevert: false,
+  syntheticMessageParts: false,
+  skills: false,
+  agents: false,
+  commands: false,
+  interactiveQuestions: false,
+  interactivePermissions: false,
+  modelSelection: false,
+  credentials: false,
+  goals: false,
+  dynamicMcpConfiguration: false,
+  dynamicProviderConfiguration: false,
+  oauthAuthentication: false,
+});
+
 // ---- Normalized events (dsh → app) ----
 // dsh emits idempotent "updated" events (full current value), not deltas, so
 // text/tool events carry a stable id and the app upserts by that id.

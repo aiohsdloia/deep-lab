@@ -1,7 +1,7 @@
 import { screen, waitFor, within, type BoundFunctions, type queries } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionMeta, SessionQuery } from "@deeplab/sdk";
+import { DSH_RUNTIME_CAPABILITIES, type SessionMeta, type SessionQuery } from "@deeplab/sdk";
 import { useRuntimeStore } from "@/lib/runtime";
 import { renderAt } from "@/test/render";
 
@@ -57,6 +57,12 @@ beforeEach(() => {
   );
   useRuntimeStore.setState({
     status: "ready",
+    capabilities: {
+      ...DSH_RUNTIME_CAPABILITIES,
+      sessionRestore: true,
+      sessionDelete: true,
+      sessionMove: true,
+    },
     setSessionArchived,
     renameSession,
     moveSessionToWorkspace,
@@ -75,7 +81,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  useRuntimeStore.setState({ sessions: [], projects: [], status: "offline" });
+  useRuntimeStore.setState({
+    sessions: [],
+    projects: [],
+    status: "offline",
+    capabilities: DSH_RUNTIME_CAPABILITIES,
+  });
 });
 
 async function openHistory(): Promise<BoundFunctions<typeof queries>> {

@@ -30,6 +30,29 @@ function runtimeWith(handlers: Record<string, Handler>) {
 }
 
 describe("dsh 0.1.1 RPC contract", () => {
+  it("reports the adapter/profile capabilities instead of unsupported method stubs", () => {
+    const { runtime } = runtimeWith({});
+
+    expect(runtime.getCapabilities()).toMatchObject({
+      sessionFork: true,
+      sessionArchive: true,
+      sessionRestore: false,
+      sessionDelete: false,
+      sessionMove: false,
+      sessionMessageRevert: false,
+      syntheticMessageParts: false,
+      skills: true,
+      interactivePermissions: true,
+      modelSelection: true,
+      credentials: true,
+      goals: true,
+      dynamicMcpConfiguration: false,
+      dynamicProviderConfiguration: false,
+      oauthAuthentication: false,
+    });
+    expect(Object.isFrozen(runtime.getCapabilities())).toBe(true);
+  });
+
   it("carries the latest goal ref through CAS mutations", async () => {
     const { runtime, calls } = runtimeWith({
       "goal.create": () => ({ ref: { id: "goal-1", revision: 1 } }),

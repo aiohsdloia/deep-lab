@@ -62,6 +62,10 @@ export const useSetupStore = create<SetupState>((set, get) => ({
   generation: 0,
 
   enableJupyter: async () => {
+    if (!useRuntimeStore.getState().capabilities.dynamicMcpConfiguration) {
+      toast.error("Connector setup is unavailable until the dsh Cordis configuration migration is complete.");
+      return;
+    }
     // One provisioning run at a time: a second `uv venv` / `pip install` into
     // the same env dir races the first and fails.
     if (get().jupyterBusy) return;
@@ -87,6 +91,10 @@ export const useSetupStore = create<SetupState>((set, get) => ({
   },
 
   enableConnector: async (id, apiKey) => {
+    if (!useRuntimeStore.getState().capabilities.dynamicMcpConfiguration) {
+      toast.error("Connector setup is unavailable until the dsh Cordis configuration migration is complete.");
+      return;
+    }
     if (get().connectorId) return; // one connector provisioning at a time
     const c = SCIENCE_CONNECTORS.find((x) => x.id === id);
     if (!c) return;
@@ -105,6 +113,10 @@ export const useSetupStore = create<SetupState>((set, get) => ({
   },
 
   enableBrowser: async (opts) => {
+    if (!useRuntimeStore.getState().capabilities.dynamicMcpConfiguration) {
+      toast.error("Browser setup is unavailable until the dsh Cordis configuration migration is complete.");
+      return;
+    }
     if (get().browserBusy) return;
     set({ browserBusy: true, line: null });
     try {

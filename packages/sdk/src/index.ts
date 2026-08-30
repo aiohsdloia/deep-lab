@@ -1,4 +1,4 @@
-export { DshRuntime } from "./dsh/DshRuntime";
+export { DshRuntime, DSH_RUNTIME_CAPABILITIES } from "./dsh/DshRuntime";
 export { DshApiClient, DshRpcError } from "./dsh/DshApiClient";
 export type { DshRuntimeOptions } from "./dsh/DshRuntime";
 export { ApiError, isApiStatus } from "./errors";
@@ -7,6 +7,8 @@ export { BaseAgentRuntime } from "./base-runtime";
 export {
   DSH_VERSION,
   DEFAULT_DSH_URL,
+  NO_RUNTIME_CAPABILITIES,
+  type RuntimeCapabilities,
   type RuntimeEvent,
   type TextUpdatedEvent,
   type ToolUpdatedEvent,
