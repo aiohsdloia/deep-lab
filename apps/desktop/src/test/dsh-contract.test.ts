@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DshRuntime } from "@deeplab/sdk";
+import { DshApiClient, DshRuntime } from "@deeplab/sdk";
 
 type Handler = (payload: Record<string, unknown>) => unknown;
 
@@ -50,6 +50,7 @@ describe("dsh 0.1.1 RPC contract", () => {
       syntheticMessageParts: false,
       skills: true,
       interactivePermissions: true,
+      persistentPermissionGrants: false,
       modelSelection: true,
       credentials: true,
       goals: true,
@@ -58,6 +59,33 @@ describe("dsh 0.1.1 RPC contract", () => {
       oauthAuthentication: false,
     });
     expect(Object.isFrozen(runtime.getCapabilities())).toBe(true);
+  });
+
+  it("treats a rejected /api/respond receipt as a protocol failure", async () => {
+    const client = new DshApiClient({
+      baseUrl: "http://127.0.0.1:1",
+      fetchImpl: vi.fn(async () =>
+        new Response(JSON.stringify({ accepted: false, reason: "not-pending" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    });
+
+    await expect(
+      client.respond("rpc-approval", {
+        ok: true,
+        value: {
+          sessionId: "session-1",
+          approvalId: "approval-1",
+          outcome: "allowed-once",
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "DshRpcError",
+      code: "response-rejected",
+      details: { reason: "not-pending" },
+    });
   });
 
   it("enables dynamic MCP only with a desktop host and never passes secret values to it", async () => {

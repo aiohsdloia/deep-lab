@@ -159,6 +159,9 @@ export function SessionView({
   const editMessage = useRuntimeStore((s) => s.editMessage);
   const revertMessage = useRuntimeStore((s) => s.revertMessage);
   const canRevertMessages = useRuntimeStore((s) => s.capabilities.sessionMessageRevert);
+  const allowPersistentPermission = useRuntimeStore(
+    (s) => s.capabilities.persistentPermissionGrants,
+  );
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
   const approvalMode = useRuntimeStore((s) => s.approvalMode);
   const setApprovalMode = useRuntimeStore((s) => s.setApprovalMode);
@@ -987,6 +990,7 @@ export function SessionView({
                 question={activeQuestion}
                 permission={activeQuestion ? undefined : activePermission}
                 origin={requestOrigin}
+                allowPersistentPermission={allowPersistentPermission}
                 onAnswer={(id, answers) => void answerQuestion(id, answers)}
                 onReject={(id) => void rejectQuestion(id)}
                 onPermission={(id, reply) => void replyPermission(id, reply)}

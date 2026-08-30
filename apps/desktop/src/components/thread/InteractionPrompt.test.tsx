@@ -111,16 +111,31 @@ describe("InteractionPrompt — permission", () => {
     resources: ["rm -rf build/"],
   };
 
-  it("shows the action and resources and replies once / always / reject", async () => {
+  it("shows the action and resources and replies once / reject by default", async () => {
     const onPermission = vi.fn();
     render(<InteractionPrompt permission={perm} onAnswer={noop} onReject={noop} onPermission={onPermission} />);
     expect(screen.getByText("rm -rf build/")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Always allow" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Allow once" }));
     expect(onPermission).toHaveBeenCalledWith("per_1", "once");
-    await userEvent.click(screen.getByRole("button", { name: "Always allow" }));
-    expect(onPermission).toHaveBeenCalledWith("per_1", "always");
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
     expect(onPermission).toHaveBeenCalledWith("per_1", "reject");
+  });
+
+  it("offers a remembered grant only when the runtime reports support", async () => {
+    const onPermission = vi.fn();
+    render(
+      <InteractionPrompt
+        permission={perm}
+        allowPersistentPermission
+        onAnswer={noop}
+        onReject={noop}
+        onPermission={onPermission}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Always allow" }));
+    expect(onPermission).toHaveBeenCalledWith("per_1", "always");
   });
 });

@@ -28,6 +28,8 @@ export interface RuntimeCapabilities {
   commands: boolean;
   interactiveQuestions: boolean;
   interactivePermissions: boolean;
+  /** Whether one approval can create a remembered rule for later tool calls. */
+  persistentPermissionGrants: boolean;
   modelSelection: boolean;
   credentials: boolean;
   goals: boolean;
@@ -50,6 +52,7 @@ export const NO_RUNTIME_CAPABILITIES: Readonly<RuntimeCapabilities> = Object.fre
   commands: false,
   interactiveQuestions: false,
   interactivePermissions: false,
+  persistentPermissionGrants: false,
   modelSelection: false,
   credentials: false,
   goals: false,

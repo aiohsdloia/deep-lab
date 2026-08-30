@@ -14,6 +14,7 @@ export function InteractionPrompt({
   question,
   permission,
   origin,
+  allowPersistentPermission = false,
   onAnswer,
   onReject,
   onPermission,
@@ -22,6 +23,8 @@ export function InteractionPrompt({
   permission?: PermissionAskedEvent;
   /** Who is asking, when it isn't the main agent — a subagent session's title. */
   origin?: string;
+  /** Show the remembered-rule action only when the active runtime supports it. */
+  allowPersistentPermission?: boolean;
   onAnswer: (requestId: string, answers: string[][]) => void;
   onReject: (requestId: string) => void;
   onPermission: (requestId: string, reply: PermissionReply) => void;
@@ -43,6 +46,7 @@ export function InteractionPrompt({
         key={permission.requestId}
         permission={permission}
         origin={origin}
+        allowPersistentPermission={allowPersistentPermission}
         onReply={onPermission}
       />
     );
@@ -219,10 +223,12 @@ function QuestionCard({
 function PermissionCard({
   permission,
   origin,
+  allowPersistentPermission,
   onReply,
 }: {
   permission: PermissionAskedEvent;
   origin?: string;
+  allowPersistentPermission: boolean;
   onReply: (requestId: string, reply: PermissionReply) => void;
 }) {
   const { t } = useTranslation(["session", "common"]);
@@ -255,12 +261,14 @@ function PermissionCard({
           {t("interaction.reject")}
         </button>
         <div className="flex-1" />
-        <button
-          className="rounded-input border border-border px-3 py-1.5 text-xs text-text hover:bg-surface-2"
-          onClick={() => onReply(permission.requestId, "always")}
-        >
-          {t("interaction.alwaysAllow")}
-        </button>
+        {allowPersistentPermission && (
+          <button
+            className="rounded-input border border-border px-3 py-1.5 text-xs text-text hover:bg-surface-2"
+            onClick={() => onReply(permission.requestId, "always")}
+          >
+            {t("interaction.alwaysAllow")}
+          </button>
+        )}
         <button
           className="rounded-input bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
           onClick={() => onReply(permission.requestId, "once")}

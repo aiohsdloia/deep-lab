@@ -53,6 +53,7 @@ export const DSH_RUNTIME_CAPABILITIES: Readonly<RuntimeCapabilities> = Object.fr
   commands: true,
   interactiveQuestions: true,
   interactivePermissions: true,
+  persistentPermissionGrants: false,
   modelSelection: true,
   credentials: true,
   goals: true,
@@ -149,7 +150,10 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   /** rpcId of a pending question/requested frame → its session + questions. */
   private readonly pendingQuestions = new Map<string, { sessionId: string; items: QuestionItem[] }>();
   /** rpcId of a pending approval/requested frame → its session + approvalId. */
-  private readonly pendingApprovals = new Map<string, { sessionId: string; approvalId: string; tool: string }>();
+  private readonly pendingApprovals = new Map<
+    string,
+    { sessionId: string; approvalId: string; tool: string; reason?: string }
+  >();
   /**
    * Accumulated streamed text/reasoning per part key (sessionId:partId). dsh
    * emits each `*-delta` chunk with only the INCREMENTAL text; the frontend
@@ -319,6 +323,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
           sessionId: frame.sessionId,
           approvalId: frame.approvalId,
           tool: frame.toolName,
+          ...(frame.reason ? { reason: frame.reason } : {}),
         });
         this.emit({
           type: "permission.asked",
@@ -330,12 +335,18 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         break;
       }
       case "approval/resolved": {
-        this.pendingApprovals.delete(frame.approvalId);
-        this.emit({
-          type: "permission.resolved",
-          sessionId: frame.sessionId,
-          requestId: frame.approvalId,
-        });
+        // The request is answered with the envelope rpcId, while dsh's
+        // cross-client resolution broadcast identifies it by approvalId.
+        // Translate back to the request id consumed by DeepLab's UI.
+        for (const [requestId, pending] of this.pendingApprovals) {
+          if (pending.approvalId !== frame.approvalId) continue;
+          this.pendingApprovals.delete(requestId);
+          this.emit({
+            type: "permission.resolved",
+            sessionId: frame.sessionId,
+            requestId,
+          });
+        }
         break;
       }
       case "session/projection":
@@ -802,14 +813,21 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         sessionId: p.sessionId,
         requestId,
         action: p.tool,
-        resources: [],
+        resources: p.reason ? [p.reason] : [],
       }));
   }
 
   async replyPermission(requestId: string, reply: PermissionReply): Promise<void> {
+    if (reply === "always") {
+      throw new DshRpcError(
+        "unsupported",
+        "dsh approvals are one-shot and cannot create a persistent permission rule.",
+      );
+    }
     const pending = this.pendingApprovals.get(requestId);
     if (!pending) return;
-    const outcome: ApprovalResponsePayload["outcome"] = reply === "reject" ? "rejected" : "allowed-once";
+    const outcome: ApprovalResponsePayload["outcome"] =
+      reply === "reject" ? "rejected" : "allowed-once";
     const payload: ApprovalResponsePayload = {
       sessionId: pending.sessionId,
       approvalId: pending.approvalId,

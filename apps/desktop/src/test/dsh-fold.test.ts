@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DshRuntime } from "@deeplab/sdk";
 import type { RuntimeEvent } from "@deeplab/sdk";
 
@@ -113,5 +113,97 @@ describe("DshRuntime chunk folding partIds", () => {
     expect(result).toBeDefined();
     expect(result!.callId).toBe("call_1");
     expect(result!.output).toBe("hi\n");
+  });
+});
+
+describe("DshRuntime approval folding", () => {
+  function foldMux(runtime: DshRuntime, rpcId: string, frame: unknown) {
+    (
+      runtime as unknown as {
+        foldMuxFrame: (requestId: string, value: unknown) => void;
+      }
+    ).foldMuxFrame(rpcId, frame);
+  }
+
+  it("correlates approvalId resolution broadcasts back to the request rpcId", async () => {
+    const runtime = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+    const events: RuntimeEvent[] = [];
+    runtime.onEvent((event) => events.push(event));
+
+    foldMux(runtime, "rpc-request-1", {
+      type: "approval/requested",
+      sessionId: "session-1",
+      approvalId: "approval-1",
+      toolName: "bash",
+      reason: "Run pnpm test",
+    });
+
+    await expect(runtime.listPermissions("session-1")).resolves.toMatchObject([
+      {
+        requestId: "rpc-request-1",
+        action: "bash",
+        resources: ["Run pnpm test"],
+      },
+    ]);
+
+    foldMux(runtime, "rpc-broadcast-2", {
+      type: "approval/resolved",
+      sessionId: "session-1",
+      approvalId: "approval-1",
+      outcome: "allowed-once",
+    });
+
+    await expect(runtime.listPermissions("session-1")).resolves.toEqual([]);
+    expect(events[events.length - 1]).toMatchObject({
+      type: "permission.resolved",
+      sessionId: "session-1",
+      requestId: "rpc-request-1",
+    });
+  });
+
+  it("sends the request rpcId and dsh approvalId when allowing once", async () => {
+    const posted: unknown[] = [];
+    const runtime = new DshRuntime({
+      baseUrl: "http://127.0.0.1:1",
+      fetchImpl: vi.fn(async (_input, init) => {
+        posted.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ accepted: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    });
+    foldMux(runtime, "rpc-request-1", {
+      type: "approval/requested",
+      sessionId: "session-1",
+      approvalId: "approval-1",
+      toolName: "bash",
+    });
+
+    await runtime.replyPermission("rpc-request-1", "once");
+
+    expect(posted).toEqual([
+      {
+        type: "client-response",
+        rpcId: "rpc-request-1",
+        result: {
+          ok: true,
+          value: {
+            sessionId: "session-1",
+            approvalId: "approval-1",
+            outcome: "allowed-once",
+          },
+        },
+      },
+    ]);
+  });
+
+  it("rejects persistent grants that dsh cannot represent", async () => {
+    const runtime = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+
+    await expect(runtime.replyPermission("rpc-request-1", "always")).rejects.toMatchObject({
+      name: "DshRpcError",
+      code: "unsupported",
+    });
   });
 });

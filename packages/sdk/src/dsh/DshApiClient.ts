@@ -108,6 +108,18 @@ export class DshApiClient implements DshRpcCaller {
     if (!response.ok) {
       throw new Error(`dsh transport failure for /api/respond: HTTP ${response.status}`);
     }
+    const receipt = (await response.json()) as {
+      accepted: boolean;
+      reason?: "not-pending" | "bad-response";
+    };
+    if (!receipt.accepted) {
+      const reason = receipt.reason ?? "unknown";
+      throw new DshRpcError(
+        "response-rejected",
+        `dsh rejected the response: ${reason}`,
+        { reason },
+      );
+    }
   }
 
   /**
