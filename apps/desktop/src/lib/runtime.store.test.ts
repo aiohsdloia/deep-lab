@@ -104,6 +104,9 @@ vi.mock("./tauri", () => ({
   installSkillMarkdown: mocks.installSkillMarkdown,
   workspaceSkillNames: mocks.workspaceSkillNames,
   adoptWorkspaceSkills: mocks.adoptWorkspaceSkills,
+  listDshMcpServers: async () => [],
+  upsertDshMcpServer: async () => [],
+  removeDshMcpServer: async () => [],
 }));
 vi.mock("./kernel", () => ({ kernelReset: mocks.kernelReset }));
 vi.mock("./systemNotification", () => ({

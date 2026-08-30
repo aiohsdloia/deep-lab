@@ -2,6 +2,7 @@
 // app still runs in `pnpm dev`; in the packaged desktop app they invoke Rust commands.
 
 import { isGatewayWeb, gatewayGet } from "./webMode";
+import type { McpConfig, McpServer } from "@deeplab/sdk";
 
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -303,6 +304,28 @@ export async function removeConfigEntry(section: "provider" | "mcp", key: string
   if (!isTauri) throw new Error("not running in the desktop app");
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("remove_config_entry", { section, key });
+}
+
+export async function listDshMcpServers(): Promise<McpServer[]> {
+  if (!isTauri) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<McpServer[]>("list_dsh_mcp_servers");
+}
+
+export async function upsertDshMcpServer(
+  name: string,
+  config: McpConfig,
+  credentialRefs: string[],
+): Promise<string[]> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string[]>("upsert_dsh_mcp_server", { name, config, credentialRefs });
+}
+
+export async function removeDshMcpServer(name: string): Promise<string[]> {
+  if (!isTauri) throw new Error("not running in the desktop app");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string[]>("remove_dsh_mcp_server", { name });
 }
 
 export interface JupyterStatus {

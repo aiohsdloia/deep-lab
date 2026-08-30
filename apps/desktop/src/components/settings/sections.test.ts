@@ -1,14 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { DSH_RUNTIME_CAPABILITIES, NO_RUNTIME_CAPABILITIES } from "@deeplab/sdk";
+import { DSH_RUNTIME_CAPABILITIES, DshRuntime, NO_RUNTIME_CAPABILITIES } from "@deeplab/sdk";
 import { visibleSections } from "./sections";
 
 describe("settings capability filtering", () => {
-  it("hides dsh connector surfaces until Cordis configuration is implemented", () => {
+  it("hides connector surfaces when no desktop Cordis host is available", () => {
     const keys = visibleSections(false, DSH_RUNTIME_CAPABILITIES).map((section) => section.key);
 
     expect(keys).not.toContain("connectors");
     expect(keys).not.toContain("browser");
     expect(keys).toContain("models");
+  });
+
+  it("shows connector surfaces for the desktop dsh composition", () => {
+    const runtime = new DshRuntime({
+      baseUrl: "http://127.0.0.1:1",
+      mcpConfigHost: {
+        list: async () => [],
+        upsert: async () => [],
+        remove: async () => [],
+      },
+    });
+    const keys = visibleSections(false, runtime.getCapabilities()).map((section) => section.key);
+
+    expect(keys).toContain("connectors");
+    expect(keys).toContain("browser");
   });
 
   it("keeps runtime-independent desktop settings before connection", () => {

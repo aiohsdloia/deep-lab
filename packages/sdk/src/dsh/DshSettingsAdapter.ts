@@ -14,11 +14,19 @@ export class DshSettingsAdapter {
   }
 
   async setProviderApiKey(providerId: string, key: string): Promise<void> {
-    await this.api.call("credentials.set", { ref: credentialRef(providerId), value: key });
+    await this.setCredential(credentialRef(providerId), key);
   }
 
   async removeProviderAuth(providerId: string): Promise<void> {
-    await this.api.call("credentials.unset", { ref: credentialRef(providerId) });
+    await this.removeCredential(credentialRef(providerId));
+  }
+
+  async setCredential(ref: string, value: string): Promise<void> {
+    await this.api.call("credentials.set", { ref, value });
+  }
+
+  async removeCredential(ref: string): Promise<void> {
+    await this.api.call("credentials.unset", { ref });
   }
 }
 

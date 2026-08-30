@@ -1,6 +1,6 @@
 export { DshRuntime, DSH_RUNTIME_CAPABILITIES } from "./dsh/DshRuntime";
 export { DshApiClient, DshRpcError } from "./dsh/DshApiClient";
-export type { DshRuntimeOptions } from "./dsh/DshRuntime";
+export type { DshMcpConfigHost, DshRuntimeOptions } from "./dsh/DshRuntime";
 export { ApiError, isApiStatus } from "./errors";
 export type { AgentRuntime } from "./runtime";
 export { BaseAgentRuntime } from "./base-runtime";

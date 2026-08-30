@@ -3,7 +3,10 @@ import { DshRuntime } from "@deeplab/sdk";
 
 type Handler = (payload: Record<string, unknown>) => unknown;
 
-function runtimeWith(handlers: Record<string, Handler>) {
+function runtimeWith(
+  handlers: Record<string, Handler>,
+  mcpConfigHost?: ConstructorParameters<typeof DshRuntime>[0]["mcpConfigHost"],
+) {
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const fetchImpl = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -24,7 +27,11 @@ function runtimeWith(handlers: Record<string, Handler>) {
     );
   });
   return {
-    runtime: new DshRuntime({ baseUrl: "http://127.0.0.1:1", fetchImpl }),
+    runtime: new DshRuntime({
+      baseUrl: "http://127.0.0.1:1",
+      fetchImpl,
+      ...(mcpConfigHost ? { mcpConfigHost } : {}),
+    }),
     calls,
   };
 }
@@ -51,6 +58,51 @@ describe("dsh 0.1.1 RPC contract", () => {
       oauthAuthentication: false,
     });
     expect(Object.isFrozen(runtime.getCapabilities())).toBe(true);
+  });
+
+  it("enables dynamic MCP only with a desktop host and never passes secret values to it", async () => {
+    const host = {
+      list: vi.fn(async () => []),
+      upsert: vi.fn(async () => []),
+      remove: vi.fn(async () => ["FRED_API_KEY"]),
+    };
+    const { runtime, calls } = runtimeWith({ "credentials.set": () => ({}) }, host);
+
+    expect(runtime.getCapabilities().dynamicMcpConfiguration).toBe(true);
+    await runtime.addMcpServer("fred", {
+      type: "local",
+      command: ["python", "-m", "fred_mcp"],
+      environment: { FRED_API_KEY: "secret-value" },
+      enabled: true,
+    });
+
+    expect(calls).toContainEqual({
+      method: "credentials.set",
+      payload: { ref: "FRED_API_KEY", value: "secret-value" },
+    });
+    expect(host.upsert).toHaveBeenCalledWith(
+      "fred",
+      { type: "local", command: ["python", "-m", "fred_mcp"], enabled: true },
+      ["FRED_API_KEY"],
+    );
+    expect(JSON.stringify(host.upsert.mock.calls)).not.toContain("secret-value");
+  });
+
+  it("removes orphaned MCP credentials after the host removes a server", async () => {
+    const host = {
+      list: vi.fn(async () => []),
+      upsert: vi.fn(async () => []),
+      remove: vi.fn(async () => ["FRED_API_KEY"]),
+    };
+    const { runtime, calls } = runtimeWith({ "credentials.unset": () => ({}) }, host);
+
+    await runtime.removeMcpServer("fred");
+
+    expect(host.remove).toHaveBeenCalledWith("fred");
+    expect(calls).toContainEqual({
+      method: "credentials.unset",
+      payload: { ref: "FRED_API_KEY" },
+    });
   });
 
   it("carries the latest goal ref through CAS mutations", async () => {

@@ -30,7 +30,6 @@ import { getClient, useRuntimeStore } from "@/lib/runtime";import {
   openWorkspaceBase,
   pickFolder,
   pythonInterpreter,
-  removeConfigEntry,
   setPythonPath,
   setWorkspaceBase,
   workspaceBase,
@@ -299,7 +298,7 @@ export function SettingsPage() {
   const disableBrowser = () =>
     run(t("toast.couldNotRemoveMcp"), async () => {
       await closeAgentBrowser();
-      await removeConfigEntry("mcp", BROWSER_MCP_ID);
+      await getClient()!.removeMcpServer(BROWSER_MCP_ID);
       await useRuntimeStore.getState().connectRetry();
       toast.success(t("toast.mcpRemoved", { name: t("browser.label") }));
     });
@@ -315,7 +314,7 @@ export function SettingsPage() {
 
   const removeMcp = (name: string) =>
     run(t("toast.couldNotRemoveMcp"), async () => {
-      await removeConfigEntry("mcp", name);
+      await getClient()!.removeMcpServer(name);
       await useRuntimeStore.getState().connectRetry();
       toast.success(t("toast.mcpRemoved", { name }));
     });

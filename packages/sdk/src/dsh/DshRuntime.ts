@@ -75,6 +75,14 @@ export interface DshRuntimeOptions {
   authHeader?: string;
   /** Query token (`?token=`) appended to WebSocket stream URLs. */
   wsQueryToken?: string;
+  /** Desktop host bridge for the app-owned Cordis MCP patch. */
+  mcpConfigHost?: DshMcpConfigHost;
+}
+
+export interface DshMcpConfigHost {
+  list(): Promise<McpServer[]>;
+  upsert(name: string, config: McpConfig, credentialRefs: string[]): Promise<string[]>;
+  remove(name: string): Promise<string[]>;
 }
 
 /** Parse a raw model-arguments JSON string into an object, or undefined. */
@@ -133,6 +141,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   private readonly goals: DshGoalAdapter;
   private readonly models: DshModelAdapter;
   private readonly settings: DshSettingsAdapter;
+  private readonly mcpConfigHost?: DshMcpConfigHost;
+  private readonly capabilities: Readonly<RuntimeCapabilities>;
   private readonly directory?: string;
   private closed = false;
   private aborts = new Set<AbortController>();
@@ -170,11 +180,15 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     this.goals = new DshGoalAdapter(this.api);
     this.models = new DshModelAdapter(this.api, () => this.anySessionId());
     this.settings = new DshSettingsAdapter(this.api);
+    this.mcpConfigHost = options.mcpConfigHost;
+    this.capabilities = options.mcpConfigHost
+      ? Object.freeze({ ...DSH_RUNTIME_CAPABILITIES, dynamicMcpConfiguration: true })
+      : DSH_RUNTIME_CAPABILITIES;
     this.directory = options.directory;
   }
 
   getCapabilities(): Readonly<RuntimeCapabilities> {
-    return DSH_RUNTIME_CAPABILITIES;
+    return this.capabilities;
   }
 
   /** Set the workspace directory new sessions are created in (move). */
@@ -903,16 +917,44 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async listMcpServers(): Promise<McpServer[]> {
-    // dsh wires MCP servers in cordis.yml plugin rows, not a runtime API; the
-    // app's own connectors are still deployed (runtime/skills + setup.ts).
-    return [];
+    return this.mcpConfigHost?.list() ?? [];
   }
 
-  async addMcpServer(_name: string, _config: McpConfig): Promise<void> {
-    throw new DshRpcError(
-      "unsupported",
-      "dsh v1 configures MCP servers in cordis.yml, not at runtime (docs/PROGRESS.md).",
-    );
+  async addMcpServer(name: string, config: McpConfig): Promise<void> {
+    const host = this.mcpConfigHost;
+    if (!host) {
+      throw new DshRpcError("unsupported", "Dynamic MCP configuration requires the desktop host.");
+    }
+    if (config.type === "remote" && Object.keys(config.headers ?? {}).length > 0) {
+      throw new DshRpcError(
+        "unsupported",
+        "Credential-backed remote MCP headers are not supported yet.",
+      );
+    }
+    const environment = config.type === "local" ? config.environment ?? {} : {};
+    const credentialRefs = Object.keys(environment);
+    for (const [ref, value] of Object.entries(environment)) {
+      await this.settings.setCredential(ref, value);
+    }
+    const sanitized =
+      config.type === "local"
+        ? { type: "local" as const, command: config.command, enabled: config.enabled }
+        : { type: "remote" as const, url: config.url, enabled: config.enabled };
+    const orphanedRefs = await host.upsert(name, sanitized, credentialRefs);
+    for (const ref of orphanedRefs) {
+      await this.settings.removeCredential(ref);
+    }
+  }
+
+  async removeMcpServer(name: string): Promise<void> {
+    const host = this.mcpConfigHost;
+    if (!host) {
+      throw new DshRpcError("unsupported", "Dynamic MCP configuration requires the desktop host.");
+    }
+    const orphanedRefs = await host.remove(name);
+    for (const ref of orphanedRefs) {
+      await this.settings.removeCredential(ref);
+    }
   }
 
   /** Exposed for parity with the AgentRuntime seam (used by tests/setup). */

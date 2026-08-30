@@ -1076,11 +1076,16 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     let cli = dsh_dir
         .join("node_modules/@deepseek-ai/dsh/lib/bin.js");
     let node = std::env::var("DEEPLAB_NODE").unwrap_or_else(|_| "node".to_string());
+    // Render the app-owned MCP inventory against this installation's current
+    // Node and resource paths before every boot. App upgrades may move either.
+    let mcp_patch = crate::dsh_mcp::refresh_patch(app)?;
 
     let mut builder = Command::new(node);
     builder
         .arg(&cli)
-        .args(["--profile", "web", "--host", "127.0.0.1", "--port", port_str.as_str()])
+        .args(["--profile", "web", "--patch"])
+        .arg(&mcp_patch)
+        .args(["--host", "127.0.0.1", "--port", port_str.as_str()])
         // App-private dirs: dsh never touches the user's ~/.dsh. DSH_AGENTS_HOME
         // isolates the user-level `~/.agents/skills` pack — a legacy Open Lab
         // install may carry Chinese-reviewed skills there that must not leak
@@ -1162,9 +1167,9 @@ fn wait_for_sidecar(url: &str) -> Result<(), String> {
     Err("timed out waiting for the dsh sidecar to listen".into())
 }
 
-/// Kill and respawn a running sidecar on its stable port. The lifecycle lock
-/// covers the complete state transition, and URL is cleared before spawning so
-/// a failed restart can never leave a stale "running" marker behind.
+/// Kill and respawn a running sidecar on its stable port. The existing gateway
+/// remains live: it resolves `sidecar_url` for every proxied request, so keeping
+/// its URL and token stable lets the frontend reconnect after the sidecar boots.
 pub(crate) fn restart_sidecar_if_running(
     app: &AppHandle,
     state: &RuntimeState,
@@ -1172,25 +1177,38 @@ pub(crate) fn restart_sidecar_if_running(
     let mut lifecycle = state.lifecycle.lock().unwrap();
     let Some(mut child) = lifecycle.child.take() else {
         lifecycle.url = None;
+        lifecycle.sidecar_url = None;
         return Ok(None);
     };
-    lifecycle.url = None;
     let _ = child.kill();
+    let _ = child.wait();
+    lifecycle.sidecar_url = None;
 
     let port = *lifecycle.port.get_or_insert_with(free_port);
-    let child = spawn_sidecar(app, port)?;
+    let mut child = spawn_sidecar(app, port).map_err(|error| {
+        lifecycle.url = None;
+        error
+    })?;
     let sidecar_url = format!("http://127.0.0.1:{port}");
-    // The gateway targets the sidecar; a restart keeps the same gateway URL (the
-    // frontend's serverUrl) and token, only the proxied sidecar moves.
-    let gw_port = if let Some(gw_url) = &lifecycle.url {
-        gw_url.trim_start_matches("http://").split(':').next_back().and_then(|p| p.parse().ok()).unwrap_or(0)
+    if let Err(error) = wait_for_sidecar(&sidecar_url) {
+        let _ = child.kill();
+        lifecycle.url = None;
+        return Err(format!("dsh sidecar failed to restart: {error}"));
+    }
+    let url = if let Some(url) = lifecycle.url.clone() {
+        url
     } else {
         let gw_state = app.state::<crate::gateway::GatewayState>().inner();
-        let (gw_port, gw_token) = crate::gateway::start_internal(app, gw_state)?;
+        let (gw_port, gw_token) = match crate::gateway::start_internal(app, gw_state) {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = child.kill();
+                return Err(error);
+            }
+        };
         lifecycle.gateway_token = Some(gw_token);
-        gw_port
+        format!("http://127.0.0.1:{gw_port}")
     };
-    let url = format!("http://127.0.0.1:{gw_port}");
     lifecycle.child = Some(child);
     lifecycle.sidecar_url = Some(sidecar_url);
     lifecycle.url = Some(url.clone());

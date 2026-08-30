@@ -16,6 +16,7 @@ mod modal;
 mod model_probe;
 mod multimodal;
 mod dsh_config;
+mod dsh_mcp;
 mod preview_server;
 mod project;
 mod provenance;
@@ -116,6 +117,9 @@ pub fn run() {
             model_probe::probe_endpoint_models,
             runtime::provider_auth_exists,
             runtime::remove_config_entry,
+            dsh_mcp::list_dsh_mcp_servers,
+            dsh_mcp::upsert_dsh_mcp_server,
+            dsh_mcp::remove_dsh_mcp_server,
             jupyter::jupyter_status,
             jupyter::setup_jupyter,
             jupyter::start_jupyter,

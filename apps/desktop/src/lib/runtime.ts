@@ -40,6 +40,7 @@ import {
   installSkillMarkdown,
   isTauri,
   listProjects,
+  listDshMcpServers,
   logDebug,
   markSession,
   newDatedWorkspace,
@@ -49,6 +50,8 @@ import {
   setWorkspace,
   startRuntime,
   runtimePassword,
+  removeDshMcpServer,
+  upsertDshMcpServer,
   workspacePath,
   workspaceSkillNames,
   type ApprovalMode,
@@ -2390,6 +2393,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     const oc = new DshRuntime({
       baseUrl,
       directory: directory ?? undefined,
+      ...(!isGatewayWeb
+        ? {
+            mcpConfigHost: {
+              list: listDshMcpServers,
+              upsert: upsertDshMcpServer,
+              remove: removeDshMcpServer,
+            },
+          }
+        : {}),
       ...(password ? { authHeader: `Bearer ${password}`, wsQueryToken: password } : {}),
     });
     dshClient = oc;
