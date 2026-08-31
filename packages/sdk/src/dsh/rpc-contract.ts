@@ -80,6 +80,17 @@ export interface DshRpcContract {
     { ns: string; patch: Record<string, unknown>; expectedRevision?: number },
     SettingsNamespaceView
   >;
+  "settings.mutate": Rpc<
+    {
+      ns: string;
+      ops: Array<
+        | { op: "set"; path: string[]; value: unknown }
+        | { op: "unset"; path: string[] }
+      >;
+      expectedRevision?: number;
+    },
+    SettingsNamespaceView
+  >;
   "credentials.set": Rpc<{ ref: string; value: string }, {}>;
   "credentials.unset": Rpc<{ ref: string }, {}>;
   "llm.providers": Rpc<{}, { providers: ConfigurableProvider[] }>;

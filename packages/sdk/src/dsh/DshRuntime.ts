@@ -59,7 +59,7 @@ export const DSH_RUNTIME_CAPABILITIES: Readonly<RuntimeCapabilities> = Object.fr
   credentials: true,
   goals: true,
   dynamicMcpConfiguration: false,
-  dynamicProviderConfiguration: false,
+  dynamicProviderConfiguration: true,
   oauthAuthentication: false,
 });
 
@@ -856,8 +856,8 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async addCustomProvider(
-    _id: string,
-    _opts: {
+    id: string,
+    opts: {
       name: string;
       npm: string;
       baseURL: string;
@@ -866,10 +866,19 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       contexts?: Record<string, number>;
     },
   ): Promise<void> {
-    throw new DshRpcError(
-      "unsupported",
-      "dsh v1 configures providers through settings namespaces, not a runtime add RPC (docs/PROGRESS.md).",
-    );
+    await this.settings.upsertCustomProvider(id, opts);
+  }
+
+  async discoverProviderModels(input: {
+    provider: string;
+    baseURL: string;
+    apiKey?: string;
+  }) {
+    return this.settings.discoverProviderModels(input);
+  }
+
+  async removeCustomProvider(id: string): Promise<void> {
+    await this.settings.removeCustomProvider(id);
   }
 
   async listProviderCatalog(): Promise<{ all: ProviderCatalogEntry[]; connected: string[] }> {
@@ -960,7 +969,10 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   }
 
   async listCustomProviderIds(): Promise<string[]> {
-    return [];
+    const providers = await this.settings.listConfigurableProviders();
+    return providers
+      .filter((provider) => provider.active && provider.declared)
+      .map((provider) => provider.provider);
   }
 
   async listMcpServers(): Promise<McpServer[]> {

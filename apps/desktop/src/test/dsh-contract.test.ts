@@ -55,7 +55,7 @@ describe("dsh 0.1.1 RPC contract", () => {
       credentials: true,
       goals: true,
       dynamicMcpConfiguration: false,
-      dynamicProviderConfiguration: false,
+      dynamicProviderConfiguration: true,
       oauthAuthentication: false,
     });
     expect(Object.isFrozen(runtime.getCapabilities())).toBe(true);
@@ -265,5 +265,100 @@ describe("dsh 0.1.1 RPC contract", () => {
         model: "deepseek-v4-flash",
       },
     });
+  });
+
+  it("configures and removes a custom OpenAI-compatible provider through dsh settings", async () => {
+    const { runtime, calls } = runtimeWith({
+      "settings.mutate": () => ({
+        ns: "llm-pi-ai",
+        schema: {},
+        value: {},
+        applies: "live",
+        secrets: [],
+        revision: 1,
+      }),
+      "credentials.set": () => ({}),
+      "credentials.unset": () => ({}),
+    });
+
+    await runtime.addCustomProvider("lab-deepseek", {
+      name: "Lab DeepSeek",
+      npm: "",
+      baseURL: "https://lab.example/v1",
+      apiKey: "secret-value",
+      models: ["deepseek-v4-flash"],
+      contexts: { "deepseek-v4-flash": 262144 },
+    });
+    await runtime.removeCustomProvider("lab-deepseek");
+
+    expect(calls).toContainEqual({
+      method: "settings.mutate",
+      payload: {
+        ns: "llm-pi-ai",
+        ops: [
+          {
+            op: "set",
+            path: ["providers", "lab-deepseek"],
+            value: {
+              displayName: "Lab DeepSeek",
+              apiKeyEnv: "LAB_DEEPSEEK_API_KEY",
+              api: "openai-completions",
+              baseURL: "https://lab.example/v1",
+              models: [
+                {
+                  id: "deepseek-v4-flash",
+                  name: "deepseek-v4-flash",
+                  contextWindow: 262144,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    expect(calls).toContainEqual({
+      method: "credentials.set",
+      payload: { ref: "LAB_DEEPSEEK_API_KEY", value: "secret-value" },
+    });
+    expect(calls).toContainEqual({
+      method: "settings.mutate",
+      payload: {
+        ns: "llm-pi-ai",
+        ops: [{ op: "unset", path: ["providers", "lab-deepseek"] }],
+      },
+    });
+    expect(calls).toContainEqual({
+      method: "credentials.unset",
+      payload: { ref: "LAB_DEEPSEEK_API_KEY" },
+    });
+  });
+
+  it("uses dsh model discovery without persisting the draft API key", async () => {
+    const { runtime, calls } = runtimeWith({
+      "llm.discoverModels": () => ({
+        models: [{ id: "deepseek-v4-flash", contextWindow: 262144 }],
+      }),
+    });
+
+    await expect(
+      runtime.discoverProviderModels({
+        provider: "lab-deepseek",
+        baseURL: "https://lab.example/v1",
+        apiKey: "draft-secret",
+      }),
+    ).resolves.toEqual([{ id: "deepseek-v4-flash", contextWindow: 262144 }]);
+
+    expect(calls).toEqual([
+      {
+        method: "llm.discoverModels",
+        payload: {
+          settingsNs: "llm-pi-ai",
+          provider: "lab-deepseek",
+          baseURL: "https://lab.example/v1",
+          api: "openai-completions",
+          apiKey: "draft-secret",
+        },
+      },
+    ]);
   });
 });

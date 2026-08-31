@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-08-31 11:37` — Restored a general initial product capability beyond demos: DeepLab can now discover, add, list, select, and remove lab/self-hosted OpenAI-compatible model endpoints through dsh-native `llm.*`, `settings.mutate`, and write-only credentials; focused contracts and a real isolated dsh sidecar round-trip pass without secrets entering settings.
 - `2026-08-31 11:22` — Made the BCI trends workflow presentation-ready: bundled a deterministic dependency-free pipeline, added readable report figures and pipeline tamper verification, routed dsh through execution/verification/presentation with DeepLab run/provenance records, and restricted bundled example resources to a clean allowlist; BCI contract tests, dsh MCP tests, lint, typecheck, the full frontend suite, and production build pass, while Rust test linking remains blocked by this Windows host lacking MSVC Build Tools and the installed GNU linker exceeding its DLL export ordinal limit.
 - `2026-08-30 23:52` — Unified DeepLab's permission control on dsh-native presets: removed the competing Rust/OpenCode-style config path and duplicate unlimited toggle, added SDK-level default/current-session permission APIs plus projection recovery, and required explicit confirmation for full access; typecheck, lint, production build, and all 893 non-live tests pass, while Rust tests remain blocked by this host resolving MSYS `link.exe` instead of MSVC Build Tools.
 - `2026-08-30 23:29` — Aligned interactive approvals with pinned dsh semantics: response receipts are enforced, cross-client resolution correlates `approvalId` back to the request `rpcId`, reasons survive pending-request recovery, and the UI no longer offers unsupported persistent grants; typecheck, lint, production build, and all 889 non-live tests pass.
@@ -28,7 +29,6 @@ Results and blockers only.
 
 - `revert` / `unrevert` (edit-a-past-message) — dsh v1 has no revert RPC; `DshRuntime` throws a descriptive error. Fork a session instead.
 - `appendTextPart` (background-agent result parts) — dsh has no synthetic-part append; surfaced live as a text update instead.
-- Runtime `addCustomProvider` / `addMcpServer` — dsh wires providers in settings namespaces and MCP servers in `cordis.yml`; the runtime `add*` calls throw a descriptive error. Connectors deploy via `runtime/skills` + setup.
 - OAuth authorize/callback flows — dsh v1 has no OAuth RPC; configure provider credentials in Settings.
 - Model selection is session-scoped at runtime; `session.selectModel` also persists dsh's default for future agents, so DeepLab updates one selected session instead of rewriting every conversation.
 - `session.list` is unpaginated in dsh v1; `querySessions` pages in the client.

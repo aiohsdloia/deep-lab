@@ -136,7 +136,7 @@
     "waitingForBrowser": "等待您在浏览器中完成操作…",
     "pasteCode": "粘贴浏览器中的代码",
     "customEndpoint": "自定义端点",
-    "customEndpointHint": "自托管 · 本地 Ollama · 兼容 OpenAI/Anthropic",
+    "customEndpointHint": "实验室服务器 · 自托管 · 本地 OpenAI 兼容端点",
     "customNamePlaceholder": "名称 — 例如 Ollama、My DeepSeek gateway",
     "openaiCompatible": "兼容 OpenAI",
     "anthropicCompatible": "兼容 Anthropic",

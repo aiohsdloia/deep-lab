@@ -52,4 +52,37 @@ describe.skipIf(!(await reachable()))("DshRuntime live smoke", () => {
       rt.close();
     }
   }, 20_000);
+
+  it("adds and removes a custom provider through the live dsh settings seam", async () => {
+    const rt = new DshRuntime({
+      baseUrl,
+      directory: "/tmp/deeplab-provider-smoke",
+      WebSocket: WebSocket as unknown as typeof globalThis.WebSocket,
+    });
+    const provider = "deeplab-smoke-local";
+    try {
+      await rt.connect();
+      await rt.addCustomProvider(provider, {
+        name: "DeepLab Smoke Local",
+        npm: "",
+        baseURL: "http://127.0.0.1:9/v1",
+        apiKey: "smoke-only",
+        models: ["deepseek-smoke"],
+        contexts: { "deepseek-smoke": 65536 },
+      });
+
+      await expect(rt.listCustomProviderIds()).resolves.toContain(provider);
+      await expect(rt.listProviders()).resolves.toContainEqual({
+        id: provider,
+        name: "DeepLab Smoke Local",
+        models: [{ id: "deepseek-smoke", name: "deepseek-smoke" }],
+      });
+
+      await rt.removeCustomProvider(provider);
+      await expect(rt.listCustomProviderIds()).resolves.not.toContain(provider);
+    } finally {
+      await rt.removeCustomProvider(provider).catch(() => undefined);
+      rt.close();
+    }
+  }, 20_000);
 });
