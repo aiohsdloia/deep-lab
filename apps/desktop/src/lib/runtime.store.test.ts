@@ -70,12 +70,12 @@ const mocks = vi.hoisted(() => ({
   /** Next runCommand call streams an event, then throws — the WKWebView
    *  ~60 s fetch kill on a long sync turn ("Load failed"). */
   dropCommandPost: false,
-  /** Approval mode the Rust config currently holds. */
-  approvalMode: "approve" as string,
-  setApprovalMode: vi.fn(async (mode: string) => {
-    mocks.approvalMode = mode;
-    return "http://127.0.0.1:1";
+  /** dsh permission preset inherited by newly created sessions. */
+  defaultPermissionPreset: "workspace-write" as string,
+  setDefaultPermissionPreset: vi.fn(async (preset: string) => {
+    mocks.defaultPermissionPreset = preset;
   }),
+  setSessionPermissionPreset: vi.fn(async (_sessionId: string, _preset: string) => {}),
   setMultimodalModels: vi.fn(async () => {}),
   notifyPermissionRequest: vi.fn(async () => true),
   startRuntime: vi.fn(async () => "http://127.0.0.1:1"),
@@ -97,8 +97,6 @@ vi.mock("./tauri", () => ({
   newDatedWorkspace: mocks.newDatedWorkspace,
   markSession: async () => {},
   commitWorkspaceSnapshot: mocks.commitWorkspaceSnapshot,
-  getApprovalMode: async () => mocks.approvalMode,
-  setApprovalMode: mocks.setApprovalMode,
   setMultimodalModels: mocks.setMultimodalModels,
   runtimePassword: async () => "pw-test",
   installSkillMarkdown: mocks.installSkillMarkdown,
@@ -192,6 +190,15 @@ vi.mock("@deeplab/sdk", async (importOriginal) => {
       mocks.setDefaultModelSpy(model);
       if (mocks.failSetModel) throw new Error("Load failed");
       mocks.currentModel = model;
+    }
+    async getDefaultPermissionPreset() {
+      return mocks.defaultPermissionPreset;
+    }
+    async setDefaultPermissionPreset(preset: string) {
+      await mocks.setDefaultPermissionPreset(preset);
+    }
+    async setSessionPermissionPreset(sessionId: string, preset: string) {
+      await mocks.setSessionPermissionPreset(sessionId, preset);
     }
     async createSession(title?: string) {
       mocks.createSessionSpy(title);
@@ -315,7 +322,7 @@ beforeEach(async () => {
   mocks.messagesGate = null;
   mocks.failMessages = false;
   mocks.failReverts = 0;
-  mocks.approvalMode = "approve";
+  mocks.defaultPermissionPreset = "workspace-write";
   mocks.currentModel = null;
   mocks.providers = [];
   mocks.failSetModel = false;
@@ -1787,30 +1794,41 @@ describe("per-session right pane", () => {
 
 
 describe("approval mode", () => {
-  it("loads the configured mode when connecting", async () => {
+  it("loads dsh's default preset when connecting", async () => {
     expect(useRuntimeStore.getState().approvalMode).toBe("approve");
-    mocks.approvalMode = "full";
+    mocks.defaultPermissionPreset = "danger-full-access";
     await useRuntimeStore.getState().connect();
     expect(useRuntimeStore.getState().approvalMode).toBe("full");
   });
 
-  it("setApprovalMode persists the choice and reconnects to the restarted sidecar", async () => {
+  it("changes the dsh default for future sessions without restarting", async () => {
+    const clientsBefore = mocks.clientOpts.length;
     await useRuntimeStore.getState().setApprovalMode("full");
-    expect(mocks.setApprovalMode).toHaveBeenCalledWith("full");
+    expect(mocks.setDefaultPermissionPreset).toHaveBeenCalledWith("danger-full-access");
     const s = useRuntimeStore.getState();
     expect(s.approvalMode).toBe("full");
-    expect(s.status).toBe("ready"); // reconnected after the restart
+    expect(s.status).toBe("ready");
+    expect(s.switching).toBe(false);
+    expect(mocks.clientOpts).toHaveLength(clientsBefore);
   });
 
-  it("setApprovalMode is a deliberate restart: `switching` masks the reconnect (no UI flash)", async () => {
-    const p = useRuntimeStore.getState().setApprovalMode("full");
-    // Synchronously flagged, like switchWorkspace — the page must not render
-    // the restart as a disconnection.
-    expect(useRuntimeStore.getState().switching).toBe(true);
-    await p;
-    const s = useRuntimeStore.getState();
-    expect(s.switching).toBe(false);
-    expect(s.status).toBe("ready");
+  it("changes an existing session through dsh's native permission command", async () => {
+    await useRuntimeStore.getState().setApprovalMode("full", "ses_1");
+    expect(mocks.setSessionPermissionPreset).toHaveBeenCalledWith(
+      "ses_1",
+      "danger-full-access",
+    );
+    expect(useRuntimeStore.getState().sessionApprovalModes.ses_1).toBe("full");
+    expect(useRuntimeStore.getState().approvalMode).toBe("approve");
+  });
+
+  it("tracks permission projection updates emitted by dsh", () => {
+    mocks.fireEvent({
+      type: "permission.preset.updated",
+      sessionId: "ses_1",
+      preset: "danger-full-access",
+    });
+    expect(useRuntimeStore.getState().sessionApprovalModes.ses_1).toBe("full");
   });
 
   it("setDefaultModel applies the model and reconnects seamlessly (no manual Connect)", async () => {

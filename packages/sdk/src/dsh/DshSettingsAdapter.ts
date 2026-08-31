@@ -1,15 +1,23 @@
+import type { PermissionPreset } from "../types";
 import type { DshRpcCaller } from "./rpc-contract";
 
 /** dsh-owned settings and write-only credential operations. */
 export class DshSettingsAdapter {
   constructor(private readonly api: DshRpcCaller) {}
 
-  async setPermissionPreset(preset: "unlimited" | "restricted"): Promise<void> {
+  async getDefaultPermissionPreset(): Promise<PermissionPreset | null> {
+    const result = await this.api.call("settings.describe", {});
+    const permission = result.namespaces.find((namespace) => namespace.ns === "permission");
+    const value = permission?.value;
+    if (!value || typeof value !== "object") return null;
+    const preset = (value as { defaultPreset?: unknown }).defaultPreset;
+    return preset === "workspace-write" || preset === "danger-full-access" ? preset : null;
+  }
+
+  async setDefaultPermissionPreset(preset: PermissionPreset): Promise<void> {
     await this.api.call("settings.update", {
       ns: "permission",
-      patch: {
-        defaultPreset: preset === "unlimited" ? "danger-full-access" : "workspace-write",
-      },
+      patch: { defaultPreset: preset },
     });
   }
 

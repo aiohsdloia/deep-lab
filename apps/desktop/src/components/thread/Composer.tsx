@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   ArrowUp,
@@ -7,7 +8,6 @@ import {
   ClipboardList,
   Hammer,
   Hand,
-  Infinity,
   ListChecks,
   MessageSquare,
   Paperclip,
@@ -24,9 +24,13 @@ import {
   addTextToWorkspace,
   isTauri,
   logDebug,
-  type ApprovalMode,
 } from "@/lib/tauri";
-import { getClient, useRuntimeStore, type AgentMode } from "@/lib/runtime";
+import {
+  getClient,
+  useRuntimeStore,
+  type AgentMode,
+  type ApprovalMode,
+} from "@/lib/runtime";
 import {
   applyRef,
   condenseTranscript,
@@ -43,7 +47,7 @@ import { parkDraft, unparkDraft, type ComposerDraft } from "@/lib/composerStash"
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { useCompactWidth } from "@/lib/useCompactWidth";
-import { isGatewayWeb } from "@/lib/webMode";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /** Composer width below which the toolbar shows icons without their labels. */
 const TOOLBAR_LABEL_MIN_PX = 440;
@@ -109,6 +113,7 @@ const APPROVAL_OPTIONS: { mode: ApprovalMode; icon: typeof Hand }[] = [
   { mode: "approve", icon: Hand },
   { mode: "full", icon: Zap },
 ];
+const FULL_ACCESS_MODE: ApprovalMode = "full";
 
 /** Build (default) or Plan — dsh's read-only planning agent. Copy is
  *  translated at render time (`agentCopy`), mirroring the approval switch. */
@@ -140,8 +145,6 @@ export function Composer({
   placeholder,
   approvalMode,
   onApprovalModeChange,
-  unlimitedMode,
-  onUnlimitedModeChange,
   agentMode,
   onAgentModeChange,
   showModelPicker,
@@ -171,10 +174,6 @@ export function Composer({
    *  session does; static mock sessions don't). */
   approvalMode?: ApprovalMode;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
-  /** "Unlimited mode" (完整文件访问): new sessions start in dsh's
-   *  danger-full-access preset. Shown beside the approval switch. */
-  unlimitedMode?: boolean;
-  onUnlimitedModeChange?: (mode: boolean) => void;
   /** The Build/Plan agent switch — same both-or-nothing contract; the live
    *  session withholds it when the runtime has no "plan" agent. */
   agentMode?: AgentMode;
@@ -252,6 +251,7 @@ export function Composer({
   const [hist, setHist] = useState<{ index: number; draft: string } | null>(null);
   /** The approval-mode menu is open. */
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [confirmFullAccess, setConfirmFullAccess] = useState(false);
   const approvalRef = useRef<HTMLDivElement>(null);
   /** The agent-mode menu is open. */
   const [agentOpen, setAgentOpen] = useState(false);
@@ -758,23 +758,38 @@ export function Composer({
   };
 
   return (
-    <div
-      ref={rootRef}
-      className={cn(
-        "relative rounded-card border bg-surface px-2 py-2 shadow-card",
-        // Plan mode gets the blue link tone — distinct from shell (warn) and
-        // a chipped command (accent) — so a read-only turn is unmistakable.
-        shellMode
-          ? "border-warn/60"
-          : command
-            ? "border-accent/50"
-            : agentMode === "plan"
-              ? "border-link/60"
-              : "border-border",
-        // Dragging a file over the window: highlight the composer as the target.
-        dragOver && "border-accent ring-2 ring-accent/40",
-      )}
-    >
+    <>
+      {confirmFullAccess &&
+        createPortal(
+          <ConfirmDialog
+            title={t("composer.approval.confirmTitle")}
+            body={t("composer.approval.confirmBody")}
+            confirmLabel={t("composer.approval.confirmAction")}
+            onConfirm={() => {
+              setConfirmFullAccess(false);
+              onApprovalModeChange?.(FULL_ACCESS_MODE);
+            }}
+            onCancel={() => setConfirmFullAccess(false)}
+          />,
+          document.body,
+        )}
+      <div
+        ref={rootRef}
+        className={cn(
+          "relative rounded-card border bg-surface px-2 py-2 shadow-card",
+          // Plan mode gets the blue link tone — distinct from shell (warn) and
+          // a chipped command (accent) — so a read-only turn is unmistakable.
+          shellMode
+            ? "border-warn/60"
+            : command
+              ? "border-accent/50"
+              : agentMode === "plan"
+                ? "border-link/60"
+                : "border-border",
+          // Dragging a file over the window: highlight the composer as the target.
+          dragOver && "border-accent ring-2 ring-accent/40",
+        )}
+      >
       {refOpen && (
         <div
           role="listbox"
@@ -1047,7 +1062,7 @@ export function Composer({
             </button>
           </div>
         )}
-        {approvalMode && onApprovalModeChange && !isGatewayWeb && (
+        {approvalMode && onApprovalModeChange && (
           <div className="relative shrink-0" ref={approvalRef}>
             {approvalOpen && (
               <div
@@ -1068,7 +1083,9 @@ export function Composer({
                     onMouseDown={(e) => {
                       e.preventDefault();
                       setApprovalOpen(false);
-                      if (opt.mode !== approvalMode) onApprovalModeChange(opt.mode);
+                      if (opt.mode === approvalMode) return;
+                      if (opt.mode === "full") setConfirmFullAccess(true);
+                      else onApprovalModeChange(opt.mode);
                     }}
                   >
                     <opt.icon size={13} className="mt-0.5 shrink-0 text-muted" />
@@ -1083,33 +1100,6 @@ export function Composer({
                     )}
                   </button>
                 ))}
-                {/* Unlimited mode: full filesystem access for new sessions. */}
-                {onUnlimitedModeChange !== undefined && (
-                  <>
-                    <div className="mx-2 my-1 h-px bg-faint" />
-                    <button
-                      role="menuitemcheckbox"
-                      aria-checked={!!unlimitedMode}
-                      className="flex w-full items-start gap-2 rounded-input px-2 py-1.5 text-left hover:bg-surface-2"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setApprovalOpen(false);
-                        onUnlimitedModeChange(!unlimitedMode);
-                      }}
-                    >
-                      <Infinity size={13} className="mt-0.5 shrink-0 text-muted" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs text-text">
-                          {t("composer.approval.unlimitedLabel")}
-                        </span>
-                        <span className="block text-xs text-muted">
-                          {t("composer.approval.unlimitedDesc")}
-                        </span>
-                      </span>
-                      {unlimitedMode && <Check size={13} className="mt-0.5 shrink-0 text-accent" />}
-                    </button>
-                  </>
-                )}
               </div>
             )}
             <button
@@ -1168,6 +1158,7 @@ export function Composer({
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

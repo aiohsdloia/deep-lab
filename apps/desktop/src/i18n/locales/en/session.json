@@ -98,8 +98,9 @@
         "label": "Full access",
         "description": "Runs every command without asking"
       },
-      "unlimitedLabel": "Unlimited mode",
-      "unlimitedDesc": "Full filesystem access for new sessions (danger-full-access)"
+      "confirmTitle": "Enable full access?",
+      "confirmBody": "The agent can access files outside the workspace and run commands without approval prompts.",
+      "confirmAction": "Enable full access"
     },
     "error": {
       "paste": "Could not save paste: {{message}}",

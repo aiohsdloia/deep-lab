@@ -98,8 +98,9 @@
         "label": "完全访问",
         "description": "不询问即运行所有命令"
       },
-      "unlimitedLabel": "无限模式",
-      "unlimitedDesc": "新会话获得完整文件系统访问权限（danger-full-access）"
+      "confirmTitle": "启用完全访问？",
+      "confirmBody": "代理将能够访问工作区以外的文件，并且无需审批即可运行命令。",
+      "confirmAction": "启用完全访问"
     },
     "error": {
       "paste": "无法保存粘贴内容：{{message}}",

@@ -37,6 +37,8 @@ export {
   type QuestionResolvedEvent,
   type PermissionAskedEvent,
   type PermissionResolvedEvent,
+  type PermissionPresetUpdatedEvent,
+  type PermissionPreset,
   type PermissionReply,
   type PromptFile,
 } from "./types";

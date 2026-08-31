@@ -1826,39 +1826,6 @@ fn remove_key_from_config(text: &str, section: &str, key: &str) -> Result<String
     serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())
 }
 
-/// The current approval mode ("approve" | "full"). Spawn seeding guarantees a
-/// mode exists once the runtime has started; before that, report the default.
-#[tauri::command]
-pub fn get_approval_mode(app: AppHandle) -> Result<String, String> {
-    let path = effective_config_file(&app)?;
-    let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    Ok(crate::dsh_config::permission_mode_of(&existing)
-        .unwrap_or(crate::dsh_config::MODE_APPROVE)
-        .to_string())
-}
-
-/// Switch the approval mode and restart the sidecar so the permission rules
-/// take effect. Returns the (stable-port) base URL when it was running.
-#[tauri::command(async)]
-pub fn set_approval_mode(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-    mode: String,
-) -> Result<String, String> {
-    let path = effective_config_file(&app)?;
-    let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    let updated = crate::dsh_config::set_permission_mode(&existing, &mode)?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, updated).map_err(|e| e.to_string())?;
-    tighten_private(&path);
-
-    // Same restart flow as a settings change: reload rules on a stable port.
-    Ok(restart_sidecar_if_running(&app, &state)?
-        .unwrap_or_else(|| path.to_string_lossy().to_string()))
-}
-
 /// The global memory file: one Markdown document the app seeds for every
 /// conversation, in the app-private dsh home next to its skills.
 fn global_memory_file(app: &AppHandle) -> Result<PathBuf, String> {
@@ -2081,7 +2048,7 @@ pub fn set_proxy_setting(
     }
     std::fs::write(&path, line).map_err(|e| e.to_string())?;
 
-    // Same restart flow as set_approval_mode: the env only applies at spawn.
+    // The proxy environment only applies at spawn, so restart on change.
     Ok(restart_sidecar_if_running(&app, &state)?
         .unwrap_or_else(|| path.to_string_lossy().to_string()))
 }

@@ -36,7 +36,6 @@ import {
   deleteProject as deleteProjectCmd,
   getAgentModels,
   getAgentVariants,
-  getApprovalMode,
   installSkillMarkdown,
   isTauri,
   listProjects,
@@ -44,7 +43,6 @@ import {
   logDebug,
   markSession,
   newDatedWorkspace,
-  setApprovalMode as persistApprovalMode,
   setMultimodalModels,
   setProxySetting as persistProxySetting,
   setWorkspace,
@@ -54,7 +52,6 @@ import {
   upsertDshMcpServer,
   workspacePath,
   workspaceSkillNames,
-  type ApprovalMode,
   type ProjectImportMode,
   type ProjectInfo,
   type ProxyMode,
@@ -375,19 +372,12 @@ interface RuntimeState {
    *  so the user can retry. Cleared by any successful reconnect, a successful
    *  switch, a server-URL change, or an explicit disconnect. */
   modelSwitchError: string | null;
-  /** The composer's approval switch: "approve" (dangerous commands prompt)
-   *  or "full" (everything in-workspace runs). Loaded from dsh config. */
+  /** dsh default inherited by sessions created after the choice. */
   approvalMode: ApprovalMode;
-  /** Persist a new approval mode (restarts the sidecar) and reconnect. */
-  setApprovalMode: (mode: ApprovalMode) => Promise<void>;
-  /** "Unlimited mode" (仿 Open Lab): new sessions start in dsh's
-   *  danger-full-access preset — full filesystem access, no approval prompts.
-   *  Off = workspace-write. Persisted via dsh's own settings, applies to every
-   *  future session. */
-  unlimitedMode: boolean;
-  /** Switch unlimited mode (persists the dsh permission preset; no restart
-   *  needed — new sessions read it at create). */
-  setUnlimitedMode: (mode: boolean) => Promise<void>;
+  /** Effective dsh permission mode per existing session. */
+  sessionApprovalModes: Record<string, ApprovalMode>;
+  /** Switch one existing session, or the default when no session id is given. */
+  setApprovalMode: (mode: ApprovalMode, sessionId?: string) => Promise<void>;
   /** Persist the network-proxy setting (restarts the sidecar) and reconnect. */
   setProxySetting: (mode: ProxyMode, url: string) => Promise<void>;
   tools: ToolStatus[];
@@ -802,6 +792,13 @@ export const draftKeyFor = (leafId: string): string => `draft:${leafId}`;
 /** The composer's agent switch: "build" edits and runs; "plan" is dsh's
  *  read-only planning agent (edits denied except its plan .md file). */
 export type AgentMode = "build" | "plan";
+export type ApprovalMode = "approve" | "full";
+
+function approvalModeOfPreset(preset: string): ApprovalMode | null {
+  if (preset === "workspace-write") return "approve";
+  if (preset === "danger-full-access") return "full";
+  return null;
+}
 /** One bounded retry for the first POSTs after a sidecar restart — the old
  *  connection occasionally dies mid-handshake ("Load failed"). */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -1297,6 +1294,10 @@ async function performTurn(
           sessionAgents[id!] = sessionAgents[draftSrc];
           delete sessionAgents[draftSrc];
         }
+        const sessionApprovalModes = {
+          ...s.sessionApprovalModes,
+          [id!]: s.approvalMode,
+        };
         // The destination has done its job: the session now carries its own
         // folder. Leaving the entry would silently aim this pane's NEXT draft
         // at the same project long after the user moved on.
@@ -1337,6 +1338,7 @@ async function performTurn(
           threads,
           panes,
           sessionAgents,
+          sessionApprovalModes,
           sendingSessions,
           sessionModels,
           sessionVariants,
@@ -1959,7 +1961,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   },
   modelSwitchError: null,
   approvalMode: "approve",
-  unlimitedMode: false,
+  sessionApprovalModes: {},
   tools: [],
   hiddenExamples: initialHidden(),
   error: null,
@@ -2249,28 +2251,21 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     }
   },
 
-  setApprovalMode: async (mode) => {
-    // A deliberate restart, like switchWorkspace: `switching` keeps the UI
-    // rendering as connected — no status flip, no page flash.
-    set({ switching: true });
-    try {
-      await persistApprovalMode(mode); // writes the config; restarts the sidecar
-      set({ approvalMode: mode });
-      await get().connectRetry();
-    } finally {
-      set({ switching: false });
+  setApprovalMode: async (mode, sessionId) => {
+    const preset = mode === "full" ? "danger-full-access" : "workspace-write";
+    if (sessionId) {
+      const runtime = clientForSession(get, sessionId);
+      if (!runtime) return;
+      await runtime.setSessionPermissionPreset(sessionId, preset);
+      set((s) => ({
+        sessionApprovalModes: { ...s.sessionApprovalModes, [sessionId]: mode },
+      }));
+      return;
     }
-  },
-
-  setUnlimitedMode: async (mode) => {
-    // No restart needed: the permission preset is read from dsh's settings at
-    // session create, so flipping it takes effect for every NEW session.
-    const client = getClient();
-    if (client && "setPermissionPreset" in client) {
-      await (client as { setPermissionPreset(p: "unlimited" | "restricted"): Promise<void> })
-        .setPermissionPreset(mode ? "unlimited" : "restricted");
-    }
-    set({ unlimitedMode: mode });
+    const runtime = getClient();
+    if (!runtime) return;
+    await runtime.setDefaultPermissionPreset(preset);
+    set({ approvalMode: mode });
   },
 
   setProxySetting: async (mode, url) => {
@@ -2387,7 +2382,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // Scope skill discovery to the workspace folder. Desktop resolves it
       // locally (reliable IPC); browser dev keeps it null.
       directory = await workspacePath();
-      set({ workspace: directory, approvalMode: await getApprovalMode() });
+      set({ workspace: directory });
       if (!samePath(previousWorkspace, directory)) clearResolvedPaths();
     }
     const oc = new DshRuntime({
@@ -2613,6 +2608,18 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               : { permissions };
           });
           return;
+        case "permission.preset.updated": {
+          const mode = approvalModeOfPreset(event.preset);
+          if (mode) {
+            set((s) => ({
+              sessionApprovalModes: {
+                ...s.sessionApprovalModes,
+                [event.sessionId]: mode,
+              },
+            }));
+          }
+          return;
+        }
         case "step.updated":
           set((s) => ({ stepCounts: { ...s.stepCounts, [event.sessionId]: event.step } }));
           return;
@@ -2656,7 +2663,14 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           return;
         }
         case "session.removed": {
-          set((s) => ({ sessions: s.sessions.filter((m) => m.id !== event.sessionId) }));
+          set((s) => {
+            const sessionApprovalModes = { ...s.sessionApprovalModes };
+            delete sessionApprovalModes[event.sessionId];
+            return {
+              sessions: s.sessions.filter((m) => m.id !== event.sessionId),
+              sessionApprovalModes,
+            };
+          });
           return;
         }
         case "session.status": {
@@ -3064,10 +3078,17 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       void logDebug(`connect → ${get().serverUrl}`);
       await c.connect();
       void logDebug("connect OK");
+      const defaultPermission = await oc.getDefaultPermissionPreset().catch(() => null);
       // Take the status from the runtime rather than waiting for a transition:
       // a REUSED ACP agent is already "ready", so its idempotent connect emits
       // nothing and the store would sit on the "connecting" this attempt set.
-      set({ error: null, status: c.getStatus() });
+      set({
+        error: null,
+        status: c.getStatus(),
+        ...(defaultPermission
+          ? { approvalMode: defaultPermission === "danger-full-access" ? "full" : "approve" }
+          : {}),
+      });
       await get().refreshSessions();
       void get().refreshProjects();
       // Catalog (skills/agents/commands) fills in behind the page — a session
@@ -3083,7 +3104,6 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // Reset those once per run. Desktop only: a gateway web client may hold a
       // read-only token, and the host app does this anyway.
       // (dsh config; an ACP agent has no such config to clean.)
-      const oc = dshClient;
       if (!isGatewayWeb && !contextLimitsCleaned && oc) {
         contextLimitsCleaned = true;
         // Best-effort: deferred into a promise chain so no failure — even a
@@ -3939,6 +3959,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       delete panes[id];
       const sessionAgents = { ...s.sessionAgents };
       delete sessionAgents[id];
+      const sessionApprovalModes = { ...s.sessionApprovalModes };
+      delete sessionApprovalModes[id];
       const queues = { ...s.queues };
       if (queues[id] !== undefined) {
         delete queues[id];
@@ -3957,6 +3979,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         runningSessions,
         panes,
         sessionAgents,
+        sessionApprovalModes,
         queues,
         interruptedSessions,
         backgroundReviews,

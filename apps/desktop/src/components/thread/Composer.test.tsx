@@ -351,7 +351,7 @@ describe("approval mode switch", () => {
     expect(screen.queryByLabelText("Approval mode")).toBeNull();
   });
 
-  it("shows the current mode and switches on pick", () => {
+  it("requires confirmation before granting full access", () => {
     const onChange = vi.fn();
     render(<Composer onSend={vi.fn()} approvalMode="approve" onApprovalModeChange={onChange} />);
     const button = screen.getByLabelText("Approval mode");
@@ -361,6 +361,10 @@ describe("approval mode switch", () => {
     // mousedown, not click — in a real browser mousedown fires before the
     // trigger button's blur closes the menu (same pattern as the palette).
     fireEvent.mouseDown(screen.getByRole("menuitemradio", { name: /Full access/ }));
+    expect(onChange).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("alertdialog", { name: /Enable full access/ });
+    expect(dialog.textContent).toContain("outside the workspace");
+    fireEvent.click(screen.getByRole("button", { name: /Enable full access/ }));
     expect(onChange).toHaveBeenCalledWith("full");
     // Menu closes after picking.
     expect(screen.queryByRole("menuitemradio", { name: /Full access/ })).toBeNull();

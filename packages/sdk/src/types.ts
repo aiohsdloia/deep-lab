@@ -213,6 +213,16 @@ export interface PermissionResolvedEvent {
   sessionId: string;
   requestId: string;
 }
+
+/** Permission policy selected for a session or inherited by a new session. */
+export type PermissionPreset = "workspace-write" | "danger-full-access";
+
+/** dsh's effective permission preset for one session changed or was recovered. */
+export interface PermissionPresetUpdatedEvent {
+  type: "permission.preset.updated";
+  sessionId: string;
+  preset: string;
+}
 export interface RuntimeErrorEvent {
   type: "error";
   sessionId?: string;
@@ -248,7 +258,8 @@ export type RuntimeEvent =
   | QuestionAskedEvent
   | QuestionResolvedEvent
   | PermissionAskedEvent
-  | PermissionResolvedEvent;
+  | PermissionResolvedEvent
+  | PermissionPresetUpdatedEvent;
 
 /** Approve a permission once, always (persist a rule), or reject it. */
 export type PermissionReply = "once" | "always" | "reject";

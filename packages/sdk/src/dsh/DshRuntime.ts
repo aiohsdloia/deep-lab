@@ -7,6 +7,7 @@ import type {
   McpServer,
   OAuthAuthorization,
   PermissionAskedEvent,
+  PermissionPreset,
   PermissionReply,
   PromptFile,
   ProviderAuthMethod,
@@ -351,6 +352,9 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       }
       case "session/projection":
         if (frame.key === "goal") this.goals.observeProjection(frame.sessionId, frame.value);
+        if (frame.key === "permissions") {
+          this.observePermissionProjection(frame.sessionId, frame.value);
+        }
         break;
       default:
         break;
@@ -644,7 +648,15 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   async getMessages(sessionId: string): Promise<HistoryMessage[]> {
     const result = await this.api.call("session.history", { sessionId });
     this.goals.observeProjection(sessionId, result.projections?.values.goal);
+    this.observePermissionProjection(sessionId, result.projections?.values.permissions);
     return foldHistory(result.events?.map((e) => e.event) ?? []);
+  }
+
+  private observePermissionProjection(sessionId: string, value: unknown): void {
+    if (!value || typeof value !== "object") return;
+    const preset = (value as { currentValue?: unknown }).currentValue;
+    if (typeof preset !== "string" || !preset) return;
+    this.emit({ type: "permission.preset.updated", sessionId, preset });
   }
 
   async appendTextPart(
@@ -872,15 +884,32 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     return {};
   }
 
-  /**
-   * Switch the dsh permission preset that NEW sessions start from: "unlimited"
-   * = danger-full-access (full filesystem access, no approval prompts),
-   * "restricted" = workspace-write (write inside the workspace, wider asks
-   * approval). Persisted in dsh's own settings (permission.defaultPreset), so
-   * it survives restarts and applies to every future session.
-   */
-  async setPermissionPreset(preset: "unlimited" | "restricted"): Promise<void> {
-    await this.settings.setPermissionPreset(preset);
+  /** Permission preset that future sessions inherit from dsh settings. */
+  async getDefaultPermissionPreset(): Promise<PermissionPreset | null> {
+    return this.settings.getDefaultPermissionPreset();
+  }
+
+  /** Persist the dsh permission preset inherited by future sessions. */
+  async setDefaultPermissionPreset(preset: PermissionPreset): Promise<void> {
+    await this.settings.setDefaultPermissionPreset(preset);
+  }
+
+  /** Switch one existing session through dsh's native `/permission` command. */
+  async setSessionPermissionPreset(
+    sessionId: string,
+    preset: PermissionPreset,
+  ): Promise<void> {
+    const result = await this.api.call("session.prompt", {
+      sessionId,
+      mode: "queue",
+      content: [{ type: "text", text: `/permission ${preset}` }],
+    });
+    if (!result.command || result.command.kind !== "success") {
+      throw new DshRpcError(
+        "command-error",
+        "dsh did not confirm the permission preset change.",
+      );
+    }
   }
 
   async setProviderApiKey(providerID: string, key: string): Promise<void> {

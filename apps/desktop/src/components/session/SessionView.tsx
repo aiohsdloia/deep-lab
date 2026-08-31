@@ -163,10 +163,10 @@ export function SessionView({
     (s) => s.capabilities.persistentPermissionGrants,
   );
   const setComposerDraft = useUiStore((s) => s.setComposerDraft);
-  const approvalMode = useRuntimeStore((s) => s.approvalMode);
+  const approvalMode = useRuntimeStore((s) =>
+    eid ? (s.sessionApprovalModes[eid] ?? s.approvalMode) : s.approvalMode,
+  );
   const setApprovalMode = useRuntimeStore((s) => s.setApprovalMode);
-  const unlimitedMode = useRuntimeStore((s) => s.unlimitedMode);
-  const setUnlimitedMode = useRuntimeStore((s) => s.setUnlimitedMode);
   const agents = useRuntimeStore((s) => s.agents);
   const sessionAgents = useRuntimeStore((s) => s.sessionAgents);
   const setAgentMode = useRuntimeStore((s) => s.setAgentMode);
@@ -1016,10 +1016,10 @@ export function SessionView({
                         ? t("composer.placeholder.plan")
                         : t("composer.placeholder.default")
               }
-               approvalMode={approvalMode}
-               onApprovalModeChange={(mode) => void setApprovalMode(mode)}
-               unlimitedMode={unlimitedMode}
-               onUnlimitedModeChange={(v) => void setUnlimitedMode(v)}
+              approvalMode={webReadOnly ? undefined : approvalMode}
+              onApprovalModeChange={
+                webReadOnly ? undefined : (mode) => void setApprovalMode(mode, eid ?? undefined)
+              }
                agentMode={planAvailable ? agentMode : undefined}
                onAgentModeChange={planAvailable ? (mode) => setAgentMode(mode, key) : undefined}
                showModelPicker={connected && !webReadOnly}

@@ -4,6 +4,7 @@ import type {
   HistoryMessage,
   RuntimeEvent,
   PermissionAskedEvent,
+  PermissionPreset,
   PermissionReply,
   PromptFile,
   QuestionAskedEvent,
@@ -105,6 +106,13 @@ export interface AgentRuntime {
   // ---- model selection ----
   getDefaultModel(): Promise<string | null>;
   setDefaultModel(model: string): Promise<void>;
+
+  // ---- execution permissions ----
+  /** Preset inherited by sessions created after a settings change. */
+  getDefaultPermissionPreset(): Promise<PermissionPreset | null>;
+  setDefaultPermissionPreset(preset: PermissionPreset): Promise<void>;
+  /** Change the effective preset of an existing session. */
+  setSessionPermissionPreset(sessionId: string, preset: PermissionPreset): Promise<void>;
 
   // ---- agent-driven execution (a full turn, not a single prompt) ----
   /** Run a shell command in the session's workspace; no model turn. */

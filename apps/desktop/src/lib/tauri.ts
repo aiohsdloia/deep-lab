@@ -82,26 +82,6 @@ export async function addPathsToWorkspace(paths: string[]): Promise<string[]> {
   return invoke<string[]>("add_paths_to_workspace", { paths });
 }
 
-/** How agent actions get approved — the composer's Codex-style switch.
- *  "approve": dangerous shell commands (delete / install / remote / privilege)
- *  and web fetches prompt first. "full": everything in-workspace just runs. */
-export type ApprovalMode = "approve" | "full";
-
-/** The approval mode the runtime currently holds ("approve" until changed). */
-export async function getApprovalMode(): Promise<ApprovalMode> {
-  if (!isTauri) return "approve";
-  const { invoke } = await import("@tauri-apps/api/core");
-  const mode = await invoke<string>("get_approval_mode");
-  return mode === "full" ? "full" : "approve";
-}
-
-/** Switch the approval mode; the sidecar restarts — the caller must reconnect. */
-export async function setApprovalMode(mode: ApprovalMode): Promise<void> {
-  if (!isTauri) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("set_approval_mode", { mode });
-}
-
 /** Write one exported conversation into a folder the user picked. Returns the
  *  file that was actually written — the name is derived from the title and
  *  de-duplicated, so nothing is silently overwritten. */

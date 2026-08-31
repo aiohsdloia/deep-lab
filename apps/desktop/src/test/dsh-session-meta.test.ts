@@ -145,13 +145,17 @@ describe("DshRuntime history folding", () => {
 });
 
 describe("DshRuntime permission preset", () => {
-  function runtimeCapture() {
+  function runtimeCapture(resultFor?: (method: string) => unknown) {
     const calls: Array<{ method: string; payload: unknown }> = [];
     const fetchImpl = vi.fn(async (_input: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? "{}"));
       calls.push({ method: body.method, payload: body.payload });
       return new Response(
-        JSON.stringify({ type: "server-response", rpcId: body.rpcId ?? "0", result: { ok: true, value: {} } }),
+        JSON.stringify({
+          type: "server-response",
+          rpcId: body.rpcId ?? "0",
+          result: { ok: true, value: resultFor?.(body.method) ?? {} },
+        }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
     });
@@ -159,18 +163,71 @@ describe("DshRuntime permission preset", () => {
     return { rt, calls };
   }
 
-  it("maps unlimited/restricted to dsh permission presets", async () => {
-    const { rt, calls } = runtimeCapture();
-    await rt.setPermissionPreset("unlimited");
-    expect(calls[calls.length - 1]).toEqual({
-      method: "settings.update",
-      payload: { ns: "permission", patch: { defaultPreset: "danger-full-access" } },
-    });
+  it("reads and writes dsh's default permission preset directly", async () => {
+    const { rt, calls } = runtimeCapture((method) =>
+      method === "settings.describe"
+        ? {
+            namespaces: [
+              { ns: "permission", value: { defaultPreset: "danger-full-access" } },
+            ],
+          }
+        : undefined,
+    );
+    await expect(rt.getDefaultPermissionPreset()).resolves.toBe("danger-full-access");
 
-    await rt.setPermissionPreset("restricted");
+    await rt.setDefaultPermissionPreset("workspace-write");
     expect(calls[calls.length - 1]).toEqual({
       method: "settings.update",
       payload: { ns: "permission", patch: { defaultPreset: "workspace-write" } },
     });
+  });
+
+  it("recovers a session's effective preset from its history projection", async () => {
+    const { rt } = runtimeCapture((method) =>
+      method === "session.history"
+        ? {
+            events: [],
+            projections: {
+              values: {
+                permissions: {
+                  options: ["workspace-write", "danger-full-access"],
+                  currentValue: "danger-full-access",
+                },
+              },
+            },
+          }
+        : undefined,
+    );
+    const events: unknown[] = [];
+    rt.onEvent((event) => events.push(event));
+    await rt.getMessages("s1");
+    expect(events).toContainEqual({
+      type: "permission.preset.updated",
+      sessionId: "s1",
+      preset: "danger-full-access",
+    });
+  });
+
+  it("switches an existing session through dsh's native slash command", async () => {
+    const { rt, calls } = runtimeCapture((method) =>
+      method === "session.prompt" ? { accepted: true, command: { kind: "success" } } : undefined,
+    );
+    await rt.setSessionPermissionPreset("s1", "danger-full-access");
+    expect(calls[calls.length - 1]).toEqual({
+      method: "session.prompt",
+      payload: {
+        sessionId: "s1",
+        mode: "queue",
+        content: [{ type: "text", text: "/permission danger-full-access" }],
+      },
+    });
+  });
+
+  it("rejects a permission command that dsh does not accept", async () => {
+    const { rt, calls } = runtimeCapture();
+    await expect(rt.setSessionPermissionPreset("s1", "workspace-write")).rejects.toThrow(
+      "did not confirm",
+    );
+    expect(calls[calls.length - 1]?.method).toBe("session.prompt");
   });
 });

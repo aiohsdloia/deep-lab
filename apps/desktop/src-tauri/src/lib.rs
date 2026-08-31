@@ -123,8 +123,6 @@ pub fn run() {
             jupyter::jupyter_status,
             jupyter::setup_jupyter,
             jupyter::start_jupyter,
-            runtime::get_approval_mode,
-            runtime::set_approval_mode,
             runtime::read_memory,
             runtime::write_memory,
             runtime::append_memory,
