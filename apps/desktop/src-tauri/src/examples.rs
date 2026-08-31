@@ -15,6 +15,14 @@ pub(crate) fn copy_missing(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if matches!(
+            name.as_ref(),
+            ".git" | ".gitkeep" | ".deeplab" | ".omo" | ".codegraph" | "__pycache__"
+        ) {
+            continue;
+        }
         let to = dst.join(entry.file_name());
         if entry.file_type()?.is_dir() {
             copy_missing(&entry.path(), &to)?;
@@ -54,11 +62,21 @@ mod tests {
         let src = base.join("src");
         let dst = base.join("dst");
         std::fs::create_dir_all(src.join("data")).unwrap();
+        std::fs::create_dir_all(src.join(".omo/run-continuation")).unwrap();
+        std::fs::create_dir_all(src.join(".deeplab")).unwrap();
         std::fs::write(src.join("README.md"), "bundled readme").unwrap();
         std::fs::write(src.join("data/x.csv"), "a,b\n1,2\n").unwrap();
+        std::fs::write(src.join("data/.gitkeep"), "").unwrap();
+        std::fs::write(src.join(".codegraph"), "/Users/developer/private").unwrap();
+        std::fs::write(src.join(".omo/run-continuation/session.json"), "{}").unwrap();
+        std::fs::write(src.join(".deeplab/runs.jsonl"), "{}").unwrap();
 
         copy_missing(&src, &dst).unwrap();
         assert_eq!(std::fs::read_to_string(dst.join("data/x.csv")).unwrap(), "a,b\n1,2\n");
+        assert!(!dst.join("data/.gitkeep").exists());
+        assert!(!dst.join(".codegraph").exists());
+        assert!(!dst.join(".omo").exists());
+        assert!(!dst.join(".deeplab").exists());
 
         // The user edits a file; re-installing must keep the edit.
         std::fs::write(dst.join("README.md"), "user edited").unwrap();

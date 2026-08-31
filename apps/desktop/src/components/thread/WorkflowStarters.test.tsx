@@ -25,6 +25,8 @@ describe("WorkflowStarters", () => {
     expect(onPick.mock.calls[0][0]).toContain("bci-trends");
     expect(onPick.mock.calls[0][0]).toContain("python scripts/analyze.py");
     expect(onPick.mock.calls[0][0]).toContain("run `python verify.py`");
+    expect(onPick.mock.calls[0][0]).toContain("present_artifact");
+    expect(onPick.mock.calls[0][0]).not.toContain("Write plan.md");
     expect(onPick.mock.calls[0][0]).toContain("Do not access the network");
     expect(onPick.mock.calls[0][0]).toContain("create/edit anything under .deeplab");
     expect(onPick.mock.calls[0][1]).toMatchObject({ id: "bci-trends", example: "bci-trends" });

@@ -14,6 +14,10 @@
       "citations"
     ]
   },
+  "pipeline": {
+    "path": "scripts/analyze.py",
+    "sha256": "ef001560c15bd1ab309b73425f894915e20bf5d65e85debd2081336c327dc630"
+  },
   "summary": {
     "path": "data/processed/corpus_summary.csv",
     "columns": ["year", "paper_count", "total_citations", "mean_citations"],

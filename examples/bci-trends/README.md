@@ -1,9 +1,9 @@
 # examples/bci-trends
 
-The built-in end-to-end demo project, used for the README, website, screenshots,
-video, and release marketing. It ships with a small seed corpus at
-`data/raw/bci_literature_seed.csv` so the agent can produce a deterministic
-workflow without web access.
+The built-in end-to-end demo project. It ships with a small seed corpus and a
+dependency-free analysis pipeline, so the dsh agent can execute, verify,
+explain, and present a deterministic workflow without web access or package
+installation.
 
 Task:
 
@@ -41,8 +41,10 @@ platform-owned records.
 
 ```text
 data/{raw,processed}/   papers/   parsed/   scripts/   notebooks/
-figures/   reports/   artifacts/   reviews/   .deeplab/   manifest.json
+figures/   reports/   artifacts/   reviews/   .deeplab/
 ```
 
-Most directories are seeded empty; the demo content is produced when the workbench
-runs the workflow against the local seed corpus.
+The pipeline is bundled rather than written live by the model. This keeps a
+classroom demonstration reproducible while leaving orchestration, execution,
+verification, interpretation, artifact presentation, and approval handling to
+the dsh agent. Output directories are seeded empty and populated during the run.

@@ -41,6 +41,8 @@ docs/superpowers/
 
 # Local runtime & secrets (never commit)
 .ai4s-workbench/
+.omo/
+.codegraph
 secrets/
 *.key
 .env

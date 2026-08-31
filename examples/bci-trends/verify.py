@@ -76,6 +76,20 @@ def verify_source(root: Path, contract: dict[str, Any], errors: list[str]) -> No
         errors.append(f"cannot parse source corpus: {error}")
 
 
+def verify_pipeline(root: Path, contract: dict[str, Any], errors: list[str]) -> None:
+    spec = contract["pipeline"]
+    path = root / spec["path"]
+    if not path.is_file():
+        errors.append(f"missing analysis pipeline: {spec['path']}")
+        return
+    normalized_bytes = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    digest = hashlib.sha256(normalized_bytes).hexdigest()
+    if digest != spec["sha256"]:
+        errors.append(
+            f"analysis pipeline changed: expected normalized sha256 {spec['sha256']}, got {digest}"
+        )
+
+
 def verify_required_files(root: Path, contract: dict[str, Any], errors: list[str]) -> None:
     for relative in contract["requiredFiles"]:
         path = root / relative
@@ -234,6 +248,7 @@ def main() -> int:
             errors.append("cannot rerun: scripts/analyze.py is missing")
 
     verify_source(root, contract, errors)
+    verify_pipeline(root, contract, errors)
     verify_required_files(root, contract, errors)
     verify_summary(root, contract, errors)
     verify_figures(root, contract, errors)

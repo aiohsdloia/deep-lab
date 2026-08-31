@@ -30,11 +30,12 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
     example: "bci-trends",
     prompt:
       "Complete the built-in bci-trends workflow using only this workspace. Read README.md, " +
-      "demo-contract.json, and data/raw/bci_literature_seed.csv first. Write plan.md and " +
-      "scripts/analyze.py, then generate the contracted summary, three PNG figures, and " +
-      "reports/report.md. Every numeric claim must come from the script's actual results. " +
-      "Run `python scripts/analyze.py` as its own command so DeepLab records its outputs. " +
-      "After that command finishes, run `python verify.py` and fix the work until it passes. " +
+      "demo-contract.json, scripts/analyze.py, and data/raw/bci_literature_seed.csv first. " +
+      "Run `python scripts/analyze.py` as its own command so DeepLab records the contracted " +
+      "summary, three PNG figures, report, run history, and provenance. Then run " +
+      "`python verify.py` and inspect reviews/review.md; do not claim success unless it passes. " +
+      "Summarize only verified findings and use present_artifact to open reports/report.md and " +
+      "figures/year_trend.png for the user. " +
       "Do not access the network, invent papers, or create/edit anything under .deeplab; " +
       "DeepLab owns run history and provenance for the dsh tool events.",
   },

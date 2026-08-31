@@ -55,7 +55,18 @@
       "../../../runtime/dsh-profile/command": "profile/command/",
       "../../../runtime/harness": "harness/",
       "../../../examples/climate-trends": "examples/climate-trends/",
-      "../../../examples/bci-trends": "examples/bci-trends/"
+      "../../../examples/bci-trends/README.md": "examples/bci-trends/README.md",
+      "../../../examples/bci-trends/demo-contract.json": "examples/bci-trends/demo-contract.json",
+      "../../../examples/bci-trends/verify.py": "examples/bci-trends/verify.py",
+      "../../../examples/bci-trends/artifacts": "examples/bci-trends/artifacts/",
+      "../../../examples/bci-trends/data": "examples/bci-trends/data/",
+      "../../../examples/bci-trends/figures": "examples/bci-trends/figures/",
+      "../../../examples/bci-trends/notebooks": "examples/bci-trends/notebooks/",
+      "../../../examples/bci-trends/papers": "examples/bci-trends/papers/",
+      "../../../examples/bci-trends/parsed": "examples/bci-trends/parsed/",
+      "../../../examples/bci-trends/reports": "examples/bci-trends/reports/",
+      "../../../examples/bci-trends/reviews": "examples/bci-trends/reviews/",
+      "../../../examples/bci-trends/scripts": "examples/bci-trends/scripts/"
     },
     "icon": [
       "icons/32x32.png",
