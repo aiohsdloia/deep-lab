@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   runShell: vi.fn(),
   renameSessionSpy: vi.fn(),
   /** What listSessions() answers — the runtime's whole history. */
-  sessionList: [] as { id: string; title: string; directory?: string }[],
+  sessionList: [] as { id: string; title: string; directory?: string; agentPreset?: string }[],
   moveSessionSpy: vi.fn(),
   /** Next moveSession call is rejected by the server (cross-project move). */
   failMove: false,
@@ -200,11 +200,16 @@ vi.mock("@deeplab/sdk", async (importOriginal) => {
     async setSessionPermissionPreset(sessionId: string, preset: string) {
       await mocks.setSessionPermissionPreset(sessionId, preset);
     }
-    async createSession(title?: string) {
-      mocks.createSessionSpy(title);
+    async createSession(title?: string, agentPreset?: string) {
+      if (agentPreset) mocks.createSessionSpy(title, agentPreset);
+      else mocks.createSessionSpy(title);
       if (mocks.failCreates > 0) {
         mocks.failCreates--;
         throw new Error("Load failed");
+      }
+      if (agentPreset === "reviewer") {
+        mocks.reviewSessionCounter++;
+        return `ses_review_${mocks.reviewSessionCounter}`;
       }
       return "ses_new";
     }
@@ -1424,7 +1429,7 @@ describe("edit a past user message", () => {
     await useRuntimeStore.getState().editMessage("msg_1", "hi fixed");
 
     expect(mocks.revertSpy).toHaveBeenCalledWith("ses_new", "msg_1", undefined);
-    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi fixed", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi fixed", "build");
     const blocks = useRuntimeStore.getState().threads["ses_new"].blocks;
     const users = blocks.filter((b) => b.kind === "user");
     expect(users).toHaveLength(1);
@@ -1447,7 +1452,7 @@ describe("edit a past user message", () => {
     await sendAndFinish("msg_1");
     await useRuntimeStore.getState().editMessage("msg_1", "hi fixed");
     expect(mocks.revertSpy).toHaveBeenCalledTimes(3);
-    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi fixed", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi fixed", "build");
   });
 
   it("surfaces an error and does not resend when revert keeps failing", async () => {
@@ -1502,7 +1507,7 @@ describe("per-session prompt queue", () => {
     // The turn completes → the queued prompt auto-starts (execute one, delete one).
     mocks.fireEvent({ type: "session.idle", sessionId: "ses_new" });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "then do B", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "then do B", "build");
     expect(useRuntimeStore.getState().queues["ses_new"] ?? []).toEqual([]);
     expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBe(true);
     // The queued prompt was echoed into the thread like a manual send.
@@ -1515,7 +1520,7 @@ describe("per-session prompt queue", () => {
   it("enqueuePrompt starts the first item right away when the session is idle", async () => {
     useRuntimeStore.getState().enqueuePrompt("ses_new", "analyze this");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "analyze this", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "analyze this", "build");
     expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBe(true);
   });
 
@@ -1538,7 +1543,7 @@ describe("per-session prompt queue", () => {
     expect(mocks.sendPromptSpy).not.toHaveBeenCalled(); // not yet — turn settling
     await p;
     // Only after the shell turn's locks fully cleared does the queued prompt go.
-    expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "after shell", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "after shell", "build");
     expect(useRuntimeStore.getState().queues["ses_new"] ?? []).toEqual([]);
     expect(useRuntimeStore.getState().runningSessions["ses_new"]).toBe(true); // now running
   });
@@ -1562,7 +1567,7 @@ describe("per-session prompt queue", () => {
     // The enqueue-time drain sends the first repeat and keeps repeats-1.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.sendPromptSpy).toHaveBeenCalledTimes(1);
-    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "repeat me", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "repeat me", "build");
     expect(useRuntimeStore.getState().queues["ses_new"]![0].repeats).toBe(2);
 
     // Each completed turn re-drains and sends the next repeat.
@@ -1592,7 +1597,7 @@ describe("per-session prompt queue", () => {
       // Advance past the plan: the wake timer drains and sends it.
       await vi.advanceTimersByTimeAsync(5 * 60_000);
       await vi.advanceTimersByTimeAsync(0); // flush performTurn's internal tick
-      expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "later", undefined);
+      expect(mocks.sendPromptSpy).toHaveBeenCalledWith("ses_new", "later", "build");
       expect(useRuntimeStore.getState().queues["ses_new"] ?? []).toEqual([]);
     } finally {
       vi.useRealTimers();
@@ -2015,7 +2020,7 @@ describe("reasoning-effort variant", () => {
     expect(mocks.sendPromptFullSpy).toHaveBeenLastCalledWith(
       "ses_new",
       "hi",
-      undefined,
+      "build",
       "openai/gpt-5",
       "high",
     );
@@ -2045,7 +2050,7 @@ describe("reasoning-effort variant", () => {
     expect(mocks.sendPromptFullSpy).toHaveBeenLastCalledWith(
       "ses_new",
       "hi",
-      undefined,
+      "build",
       "openai/gpt-5.6-sol",
       "max",
     );
@@ -2143,6 +2148,45 @@ describe("model switch failure state", () => {
 });
 
 describe("plan agent mode", () => {
+  it("uses the dsh-declared default preset and lets a draft choose another preset", async () => {
+    useRuntimeStore.setState({
+      agents: [
+        { name: "standard", description: "", mode: "preset", isDefault: true },
+        { name: "code", description: "", mode: "preset", isDefault: false },
+      ],
+      workspace: "/ws/presets",
+      draftWorkspaces: { [DRAFT_KEY]: "/ws/presets" },
+    });
+
+    await useRuntimeStore.getState().sendPrompt("default turn");
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "default turn", "standard");
+
+    mocks.sendPromptSpy.mockClear();
+    useRuntimeStore.getState().startDraft();
+    useRuntimeStore.setState({
+      agents: [
+        { name: "standard", description: "", mode: "preset", isDefault: true },
+        { name: "code", description: "", mode: "preset", isDefault: false },
+      ],
+      draftWorkspaces: { [DRAFT_KEY]: "/ws/presets" },
+    });
+    useRuntimeStore.getState().setAgentMode("code");
+    await useRuntimeStore.getState().sendPrompt("code turn");
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "code turn", "code");
+  });
+
+  it("restores the fixed dsh preset from session.list", async () => {
+    mocks.sessionList = [
+      {
+        id: "ses_code",
+        title: "Code session",
+        agentPreset: "code",
+      },
+    ];
+    await useRuntimeStore.getState().refreshSessions();
+    expect(useRuntimeStore.getState().sessionAgents.ses_code).toBe("code");
+  });
+
   it("pins agent 'plan' on send, and grafts the draft's mode onto the new session", async () => {
     useRuntimeStore.getState().setAgentMode("plan");
     const id = await useRuntimeStore.getState().sendPrompt("plan an analysis");
@@ -2153,16 +2197,16 @@ describe("plan agent mode", () => {
     expect(sessionAgents["draft"]).toBeUndefined();
   });
 
-  it("omits the agent field entirely in build mode", async () => {
+  it("pins the runtime default agent in build mode", async () => {
     await useRuntimeStore.getState().sendPrompt("hello");
-    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hello", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hello", "build");
   });
 
   it("never pins a stale plan mode when the runtime has no plan agent", async () => {
     useRuntimeStore.setState({ agents: [{ name: "build", description: "", mode: "primary" }] });
     useRuntimeStore.getState().setAgentMode("plan");
     await useRuntimeStore.getState().sendPrompt("hi");
-    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi", undefined);
+    expect(mocks.sendPromptSpy).toHaveBeenLastCalledWith("ses_new", "hi", "build");
   });
 
   it("follows dsh's plan_exit Yes-path: a build user message flips the pill", async () => {
@@ -2556,7 +2600,8 @@ describe("auto-review on turn completion", () => {
 
     const [sid, text, agent, model, variant] = reviewCalls()[0]!;
     expect(sid).toBe("ses_review_1");
-    expect(mocks.forkSessionSpy).toHaveBeenCalledWith("ses_1", undefined);
+    expect(mocks.createSessionSpy).toHaveBeenCalledWith("Background review", "reviewer");
+    expect(mocks.forkSessionSpy).not.toHaveBeenCalled();
     expect(text).toContain("Review the work just completed");
     expect(text).toContain("- analysis.py");
     expect(agent).toBe("reviewer");
@@ -2568,7 +2613,7 @@ describe("auto-review on turn completion", () => {
     expect(useRuntimeStore.getState().runningSessions["ses_1"]).toBeUndefined();
     expect(useRuntimeStore.getState().backgroundReviews["ses_1"]).toBe("running");
 
-    // The hidden fork's result is attached to the parent checkpoint and its own
+    // The hidden review session's result is attached to the parent checkpoint and its own
     // reasoning/tool transcript is discarded.
     finishReview();
     await vi.waitFor(() => expect(mocks.appendTextPartSpy).toHaveBeenCalledTimes(1));
@@ -2636,7 +2681,7 @@ describe("auto-review on turn completion", () => {
     expect(reviewCalls()).toHaveLength(1);
   });
 
-  it("turning auto-review off while history loads prevents the hidden fork", async () => {
+  it("turning auto-review off while history loads prevents the hidden review session", async () => {
     let releaseHistory!: () => void;
     mocks.messagesGate = new Promise<void>((resolve) => {
       releaseHistory = resolve;
@@ -2651,7 +2696,7 @@ describe("auto-review on turn completion", () => {
     releaseHistory();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(mocks.forkSessionSpy).not.toHaveBeenCalled();
+    expect(mocks.createSessionSpy).not.toHaveBeenCalledWith("Background review", "reviewer");
     expect(reviewCalls()).toHaveLength(0);
     expect(useRuntimeStore.getState().backgroundReviews).toEqual({});
   });
@@ -2696,7 +2741,7 @@ describe("auto-review on turn completion", () => {
     expect(useRuntimeStore.getState().threads["ses_review_1"]).toBeUndefined();
   });
 
-  it("forks before a newer foreground turn so the reviewed checkpoint is included", async () => {
+  it("attaches the review to its checkpoint before a newer foreground turn", async () => {
     armed(["ses_1"]);
     useRuntimeStore.setState({
       threads: {
@@ -2720,7 +2765,7 @@ describe("auto-review on turn completion", () => {
     mocks.fireEvent({ type: "session.idle", sessionId: "ses_1" });
 
     await vi.waitFor(() => expect(reviewCalls()).toHaveLength(1));
-    expect(mocks.forkSessionSpy).toHaveBeenCalledWith("ses_1", "msg_next_turn");
+    expect(mocks.createSessionSpy).toHaveBeenCalledWith("Background review", "reviewer");
     finishReview();
     await vi.waitFor(() =>
       expect(mocks.appendTextPartSpy).toHaveBeenCalledWith(
@@ -2783,7 +2828,7 @@ describe("auto-review on turn completion", () => {
 
     mocks.fireEvent({ type: "session.idle", sessionId: "ses_parent" });
     await vi.waitFor(() => expect(reviewCalls()).toHaveLength(1));
-    expect(mocks.forkSessionSpy).toHaveBeenCalledWith("ses_parent", undefined);
+    expect(mocks.createSessionSpy).toHaveBeenCalledWith("Background review", "reviewer");
     expect(reviewCalls()[0]![0]).toBe("ses_review_1");
   });
 
@@ -3004,7 +3049,7 @@ describe("per-agent model precedence", () => {
     await withAgents({ build: "anthropic/claude-opus-4-8" });
     await useRuntimeStore.getState().sendPrompt("hi");
     const [, , agent, model] = lastSend();
-    expect(agent).toBeUndefined();
+    expect(agent).toBe("build");
     expect(model).toBeNull();
   });
 

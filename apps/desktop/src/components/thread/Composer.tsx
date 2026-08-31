@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import type { AgentInfo } from "@deeplab/sdk";
 import {
   ArrowUp,
+  Bot,
   Check,
   ChevronDown,
   ClipboardList,
+  Code2,
   Hammer,
   Hand,
   ListChecks,
@@ -13,6 +16,7 @@ import {
   Paperclip,
   Send,
   Square,
+  Sparkles,
   Terminal,
   X,
   Zap,
@@ -115,12 +119,16 @@ const APPROVAL_OPTIONS: { mode: ApprovalMode; icon: typeof Hand }[] = [
 ];
 const FULL_ACCESS_MODE: ApprovalMode = "full";
 
-/** Build (default) or Plan — dsh's read-only planning agent. Copy is
- *  translated at render time (`agentCopy`), mirroring the approval switch. */
-const AGENT_OPTIONS: { mode: AgentMode; icon: typeof Hammer }[] = [
-  { mode: "build", icon: Hammer },
-  { mode: "plan", icon: ClipboardList },
-];
+const LEGACY_AGENT_MODES = ["build", "plan"] as const;
+
+function agentIcon(name: string): typeof Hammer {
+  if (name === "build") return Hammer;
+  if (name === "plan") return ClipboardList;
+  if (name === "code") return Code2;
+  if (name === "minimal") return Terminal;
+  if (name === "cordis") return Sparkles;
+  return Bot;
+}
 
 /**
  * The "Ask anything" composer. Static mock sessions pass no `onSend`; the live
@@ -146,6 +154,7 @@ export function Composer({
   approvalMode,
   onApprovalModeChange,
   agentMode,
+  agentOptions,
   onAgentModeChange,
   showModelPicker,
   modelSessionId,
@@ -174,9 +183,11 @@ export function Composer({
    *  session does; static mock sessions don't). */
   approvalMode?: ApprovalMode;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
-  /** The Build/Plan agent switch — same both-or-nothing contract; the live
-   *  session withholds it when the runtime has no "plan" agent. */
+  /** Runtime agent presets. New dsh sessions may choose one; once a session
+   *  starts the current preset remains visible but `onAgentModeChange` is
+   *  withheld because dsh locks it. */
   agentMode?: AgentMode;
+  agentOptions?: AgentInfo[];
   onAgentModeChange?: (mode: AgentMode) => void;
   /** Show the inline model + reasoning-effort switcher (left of send). The live
    *  session opts in; static mock sessions have no runtime to switch. */
@@ -220,8 +231,10 @@ export function Composer({
       description: t("composer.approval.full.description"),
     },
   };
-  // Agent-mode copy, same pattern as approvalCopy.
-  const agentCopy: Record<AgentMode, { label: string; description: string }> = {
+  const legacyAgentCopy: Record<
+    (typeof LEGACY_AGENT_MODES)[number],
+    { label: string; description: string }
+  > = {
     build: {
       label: t("composer.agent.build.label"),
       description: t("composer.agent.build.description"),
@@ -231,6 +244,14 @@ export function Composer({
       description: t("composer.agent.plan.description"),
     },
   };
+  const resolvedAgentOptions: AgentInfo[] =
+    agentOptions && agentOptions.length > 0
+      ? agentOptions
+      : LEGACY_AGENT_MODES.map((name) => ({ name, ...legacyAgentCopy[name] }));
+  const selectedAgent =
+    resolvedAgentOptions.find((option) => option.name === agentMode) ??
+    (agentMode ? { name: agentMode, label: agentMode, description: "" } : undefined);
+  const SelectedAgentIcon = agentIcon(agentMode ?? "");
   // Reclaim whatever this pane had typed before it was last unmounted (a screen
   // switch tears panes down). Unparked once, on mount, so the two states below
   // seed from the same draft.
@@ -1006,9 +1027,9 @@ export function Composer({
         {/* Folder picker for a fresh draft — renders nothing once the session
             exists (its folder then shows in the header's Files toggle). */}
         {showWorkspaceChip && <WorkspaceChip draftKey={draftKey} />}
-        {agentMode && onAgentModeChange && (
+        {agentMode && selectedAgent && (
           <div className="relative shrink-0" ref={agentRef}>
-            {agentOpen && (
+            {agentOpen && onAgentModeChange && (
               <div
                 role="menu"
                 aria-label={t("composer.agent.menuAria")}
@@ -1017,48 +1038,53 @@ export function Composer({
                 <div className="px-2 pb-1 pt-1.5 text-xs text-muted">
                   {t("composer.agent.menuTitle")}
                 </div>
-                {AGENT_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.mode}
-                    role="menuitemradio"
-                    aria-checked={opt.mode === agentMode}
-                    className="flex w-full items-start gap-2 rounded-input px-2 py-1.5 text-left hover:bg-surface-2"
-                    // mousedown, not click — a click would blur the textarea first.
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setAgentOpen(false);
-                      if (opt.mode !== agentMode) onAgentModeChange(opt.mode);
-                    }}
-                  >
-                    <opt.icon size={13} className="mt-0.5 shrink-0 text-muted" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs text-text">{agentCopy[opt.mode].label}</span>
-                      <span className="block text-xs text-muted">
-                        {agentCopy[opt.mode].description}
+                {resolvedAgentOptions.map((option) => {
+                  const Icon = agentIcon(option.name);
+                  return (
+                    <button
+                      key={option.name}
+                      role="menuitemradio"
+                      aria-checked={option.name === agentMode}
+                      className="flex w-full items-start gap-2 rounded-input px-2 py-1.5 text-left hover:bg-surface-2"
+                      // mousedown, not click — a click would blur the textarea first.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setAgentOpen(false);
+                        if (option.name !== agentMode) onAgentModeChange(option.name);
+                      }}
+                    >
+                      <Icon size={13} className="mt-0.5 shrink-0 text-muted" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-text">
+                          {option.label ?? option.name}
+                        </span>
+                        <span className="block text-xs text-muted">{option.description}</span>
                       </span>
-                    </span>
-                    {opt.mode === agentMode && (
-                      <Check size={13} className="mt-0.5 shrink-0 text-accent" />
-                    )}
-                  </button>
-                ))}
+                      {option.name === agentMode && (
+                        <Check size={13} className="mt-0.5 shrink-0 text-accent" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
             <button
               aria-label={t("composer.agent.aria")}
-              title={t("composer.agent.title")}
+              title={onAgentModeChange ? t("composer.agent.title") : t("composer.agent.lockedTitle")}
+              disabled={!onAgentModeChange}
               className={cn(
                 "flex h-7 items-center rounded-full text-xs",
                 compactToolbar ? "gap-0.5 px-1.5" : "gap-1.5 px-2.5",
                 agentMode === "plan"
                   ? "bg-link/15 text-link hover:bg-link/25"
-                  : "text-muted hover:bg-surface-2 hover:text-text",
+                  : "text-muted",
+                onAgentModeChange && "hover:bg-surface-2 hover:text-text",
               )}
-              onClick={() => setAgentOpen((o) => !o)}
+              onClick={() => onAgentModeChange && setAgentOpen((o) => !o)}
             >
-              {agentMode === "plan" ? <ClipboardList size={12} /> : <Hammer size={12} />}
-              {!compactToolbar && <span>{agentCopy[agentMode].label}</span>}
-              {!compactToolbar && <ChevronDown size={11} />}
+              <SelectedAgentIcon size={12} />
+              {!compactToolbar && <span>{selectedAgent.label ?? selectedAgent.name}</span>}
+              {!compactToolbar && onAgentModeChange && <ChevronDown size={11} />}
             </button>
           </div>
         )}

@@ -410,6 +410,29 @@ describe("agent mode switch (Build / Plan)", () => {
     expect(screen.queryByRole("menuitemradio", { name: /Plan/ })).toBeNull();
   });
 
+  it("renders dsh-native presets and locks the choice after a session starts", () => {
+    const options = [
+      { name: "standard", label: "Standard", description: "Full agent runtime" },
+      { name: "code", label: "Code mode", description: "Programmatic tools" },
+    ];
+    const { rerender } = render(
+      <Composer
+        onSend={vi.fn()}
+        agentMode="standard"
+        agentOptions={options}
+        onAgentModeChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Agent mode"));
+    expect(screen.getByRole("menuitemradio", { name: /Code mode/ })).toBeInTheDocument();
+
+    rerender(<Composer onSend={vi.fn()} agentMode="code" agentOptions={options} />);
+    const locked = screen.getByLabelText("Agent mode");
+    expect(locked.textContent).toContain("Code mode");
+    expect(locked).toBeDisabled();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("plan mode tints the composer border and pill blue (read-only must be unmistakable)", () => {
     const { container } = render(
       <Composer onSend={vi.fn()} agentMode="plan" onAgentModeChange={vi.fn()} />,

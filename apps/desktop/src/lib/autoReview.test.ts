@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   autoReviewPrompt,
@@ -63,30 +64,58 @@ describe("shouldAutoReview", () => {
 
 describe("autoReviewPrompt", () => {
   it("pins the reviewer to the completed turn's changed files", () => {
-    const prompt = autoReviewPrompt(["analysis.py", "report.md"]);
+    const prompt = autoReviewPrompt(["analysis.py", "report.md"], "Fit the preregistered model");
     expect(prompt).toContain("- analysis.py\n- report.md");
+    expect(prompt).toContain("Fit the preregistered model");
     expect(prompt).toContain("checkpoint only");
     expect(prompt).toContain("absent Git HEAD");
   });
 });
 
-// The reviewer is deployed into the dsh profile as a real agent. `mode`
-// decides who may invoke it: `all` also puts it on the task tool's delegation
-// menu, so a model could spawn it by itself and reviews turned up inside
-// subagents even with auto-review switched off. The app pins it as the agent of
-// its own background session — the primary role — so `primary` is what keeps
-// the feature working without handing it to the model.
-describe("the reviewer agent's profile", () => {
-  it("is not offered to the task tool", () => {
-    // vitest runs from apps/desktop; the profile lives at the repo root.
-    const md = readFileSync(
-      resolve(process.cwd(), "../../runtime/dsh-profile/agent/reviewer.md"),
-      "utf8",
+describe("the reviewer preset", () => {
+  it("uses the native dsh composition and enforces read-only execution", () => {
+    const root = resolve(process.cwd(), "../../runtime/dsh-profile/presets/reviewer");
+    const composition = readFileSync(resolve(root, "agent.cordis.yml"), "utf8");
+    const policy = readFileSync(resolve(root, "reviewer-policy.mjs"), "utf8");
+
+    expect(composition).toContain("name: '@deepseek-ai/dsh-tool-fs'");
+    expect(composition).not.toContain("name: '@deepseek-ai/dsh-tool-bash'");
+    expect(composition).not.toContain("name: '@deepseek-ai/dsh-tool-subagent'");
+    expect(composition).toContain("name: './reviewer-policy.mjs'");
+    expect(policy).toContain('"write"');
+    expect(policy).toContain('"edit"');
+    expect(policy).toContain("ctx.tools.guard");
+  });
+
+  it("denies mutation tools while allowing reads", async () => {
+    const path = resolve(
+      process.cwd(),
+      "../../runtime/dsh-profile/presets/reviewer/reviewer-policy.mjs",
     );
-    const frontmatter = md.split("---")[1] ?? "";
-    const mode = /^mode:\s*(\S+)/m.exec(frontmatter)?.[1];
-    expect(mode).toBe("primary");
-    // It also may not spawn tasks of its own — a review that delegates is a loop.
-    expect(frontmatter).toMatch(/task:\s*deny/);
+    const policy = (await import(/* @vite-ignore */ pathToFileURL(path).href)) as {
+      apply(ctx: {
+        tools: {
+          restrict(filter: { allow: string[] }): void;
+          guard(callback: (execution: { name: string }) => string | undefined): void;
+        };
+      }): void;
+    };
+    let guard: ((execution: { name: string }) => string | undefined) | undefined;
+    let restriction: { allow: string[] } | undefined;
+    policy.apply({
+      tools: {
+        restrict(filter) {
+          restriction = filter;
+        },
+        guard(callback) {
+          guard = callback;
+        },
+      },
+    });
+
+    expect(restriction).toEqual({ allow: [] });
+    expect(guard?.({ name: "write" })).toContain("read-only");
+    expect(guard?.({ name: "edit" })).toContain("read-only");
+    expect(guard?.({ name: "read" })).toBeUndefined();
   });
 });

@@ -171,6 +171,9 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
    * archived conversation must not reappear after a reconnect or app restart.
    */
   private archivedIds = new Set<string>();
+  /** dsh fixes a session's agent preset after its first turn. Keep the value
+   *  returned by create/list so repeated sends do not issue a locked switch. */
+  private readonly sessionAgentPresets = new Map<string, string>();
 
   constructor(options: DshRuntimeOptions) {
     super();
@@ -541,10 +544,12 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   // ---- sessions ----
 
-  async createSession(title?: string): Promise<string> {
+  async createSession(title?: string, agentPreset?: string): Promise<string> {
     const result = await this.api.call("session.create", {
       ...(this.directory ? { cwd: this.directory } : {}),
+      ...(agentPreset ? { agentPreset } : {}),
     });
+    if (result.agentPreset) this.sessionAgentPresets.set(result.sessionId, result.agentPreset);
     if (title) {
       await this.api.call("session.rename", { sessionId: result.sessionId, title }).catch(() => undefined);
     }
@@ -596,6 +601,9 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     const result = await this.api.call("session.list", {});
     const archivedAt = new Map<string, number>();
     for (const id of this.archivedIds) archivedAt.set(id, Date.now());
+    for (const session of result.items ?? []) {
+      if (session.agentPreset) this.sessionAgentPresets.set(session.sessionId, session.agentPreset);
+    }
     return (result.items ?? []).map((s) => toSessionMeta(s, archivedAt));
   }
 
@@ -633,6 +641,7 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     const result = await this.api.call("workspace.archiveSession", { sessionId }).catch(() => undefined);
     if (result) this.archivedIds = new Set(result.archivedSessionIds);
     else this.archivedIds.add(sessionId);
+    this.sessionAgentPresets.delete(sessionId);
   }
 
   /** dsh sessions bind their cwd at create and cannot be re-homed; the app
@@ -679,12 +688,22 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
   async sendPrompt(
     sessionId: string,
     text: string,
-    _agent?: string,
+    agent?: string,
     model?: string | null,
     variant?: string | null,
     _clean?: boolean,
     files?: PromptFile[],
   ): Promise<void> {
+    // A dsh agent preset belongs to the whole session, not one turn. The RPC is
+    // valid only while the session is blank, so select it before the first
+    // prompt and remember the result. The UI locks this choice once started.
+    if (agent && this.sessionAgentPresets.get(sessionId) !== agent) {
+      const selected = await this.api.call("agentPreset.select", {
+        sessionId,
+        agentPreset: agent,
+      });
+      this.sessionAgentPresets.set(sessionId, selected.agentPreset);
+    }
     // Model choice is session state in dsh, not part of session.prompt. Keep
     // the product's per-pane picker truthful by applying it immediately before
     // the turn instead of silently falling back to dsh's previous selection.
@@ -740,7 +759,13 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
 
   async listAgents(): Promise<AgentInfo[]> {
     const result = await this.api.call("agentPreset.list", {});
-    return result.presets.map((a) => ({ name: a.id, description: a.description ?? "" }));
+    return result.presets.map((preset) => ({
+      name: preset.id,
+      label: preset.name,
+      description: preset.description ?? "",
+      mode: "preset",
+      isDefault: preset.isDefault,
+    }));
   }
 
   async listCommands(): Promise<CommandInfo[]> {
@@ -1044,6 +1069,7 @@ function toSessionMeta(
   return {
     id: summary.sessionId,
     title,
+    agentPreset: summary.agentPreset,
     directory: summary.cwd,
     parentId: summary.parentSessionId,
     created: undefined,

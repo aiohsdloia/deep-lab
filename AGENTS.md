@@ -39,7 +39,7 @@ provenance.
   the dsh client-framework implementation, `OpenCodeClient` is retained as the
   legacy reference runtime).
 - `runtime/` — `dsh` (the bundled sidecar launcher), `dsh-acp`, `manager`,
-  `opencode-profile`, `mcp`, `skills`.
+  `dsh-profile` (native presets and commands), `mcp`, `skills`.
 - `docs/` — product and technical specs.
 - `examples/bci-trends/` — the built-in demo project.
 - `scripts/` — release and dev scripts.

@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import type { RuntimeStatus } from "@deeplab/shared";
-import { draftKeyFor, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
+import { defaultAgentName, draftKeyFor, rootSessionOf, useRuntimeStore } from "@/lib/runtime";
 import { toast } from "@/lib/toast";
 import { useLayoutStore } from "@/lib/layout";
 import { startPaneDrag } from "@/lib/dragPane";
@@ -355,8 +355,8 @@ export function SessionView({
   }, [thread?.blocks]);
 
   const pane = panes[key];
-  const planAvailable = agents.some((a) => a.name === "plan");
-  const agentMode = sessionAgents[key] ?? "build";
+  const selectableAgents = agents.filter((agent) => agent.mode !== "subagent");
+  const agentMode = sessionAgents[key] ?? defaultAgentName(selectableAgents) ?? undefined;
   const activeArtifact = pane?.artifact ?? null;
   const showFiles = !activeArtifact && !!pane?.showFiles;
   const showRuns = !activeArtifact && !showFiles && !!pane?.showRuns;
@@ -1034,7 +1034,7 @@ export function SessionView({
                       ? t("composer.placeholder.modelRequired")
                     : !connected
                       ? t("live.placeholder.disconnected")
-                      : planAvailable && agentMode === "plan"
+                      : agentMode === "plan"
                         ? t("composer.placeholder.plan")
                         : t("composer.placeholder.default")
               }
@@ -1042,10 +1042,15 @@ export function SessionView({
               onApprovalModeChange={
                 webReadOnly ? undefined : (mode) => void setApprovalMode(mode, eid ?? undefined)
               }
-               agentMode={planAvailable ? agentMode : undefined}
-               onAgentModeChange={planAvailable ? (mode) => setAgentMode(mode, key) : undefined}
-               showModelPicker={connected && !webReadOnly}
-               modelSessionId={key}
+              agentMode={agentMode}
+              agentOptions={selectableAgents}
+              onAgentModeChange={
+                !webReadOnly && eid === null && selectableAgents.length > 1
+                  ? (mode) => setAgentMode(mode, key)
+                  : undefined
+              }
+              showModelPicker={connected && !webReadOnly}
+              modelSessionId={key}
               draftKey={draftKey}
               showWorkspaceChip={eid === null}
               sessionDir={sessionDir ?? undefined}

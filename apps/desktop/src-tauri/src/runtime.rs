@@ -433,47 +433,72 @@ fn deploy_workbench_tools(app: &AppHandle) {
     }
 }
 
-/// App-owned prompt files deployed into the dsh profile: the `reviewer`
-/// agent and the commands that invoke it (#72). `(resource dir, profile dir)`.
-const PROFILE_PROMPTS: &[(&str, &str)] =
-    &[("profile/agent", "agent"), ("profile/command", "command")];
-
-/// Ship the app's own agent and command definitions into the global profile
-/// (`<xdg-config>/dsh/{agent,command}/`), which dsh scans for
-/// `**/*.md` in every workspace. Refreshed on every sidecar start so app
-/// upgrades replace them in place; files the user added themselves are left
-/// alone, since only our own names are written.
-fn deploy_profile_prompts(app: &AppHandle) {
+/// Ship app-owned slash commands into dsh's global command directory. Agent
+/// presets use a different native format and are deployed below.
+fn deploy_profile_commands(app: &AppHandle) {
     let Ok(config_home) = xdg_config_home(app) else {
         return;
     };
-    for (resource, dir) in PROFILE_PROMPTS {
-        let Ok(src) = app
-            .path()
-            .resolve(resource, tauri::path::BaseDirectory::Resource)
-        else {
+    let Ok(src) = app
+        .path()
+        .resolve("profile/command", tauri::path::BaseDirectory::Resource)
+    else {
+        return;
+    };
+    if !src.is_dir() {
+        return;
+    }
+    let dst = config_home.join("dsh").join("command");
+    if let Err(e) = std::fs::create_dir_all(&dst) {
+        eprintln!("failed to create profile command directory: {e}");
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(&src) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || path.extension() != Some(std::ffi::OsStr::new("md")) {
             continue;
-        };
-        if !src.is_dir() {
-            continue; // dev run without the bundled resources
         }
-        let dst = config_home.join("dsh").join(dir);
-        if let Err(e) = std::fs::create_dir_all(&dst) {
-            eprintln!("failed to create profile {dir} directory: {e}");
+        let Some(name) = path.file_name() else { continue };
+        if let Err(e) = std::fs::copy(&path, dst.join(name)) {
+            eprintln!("failed to deploy profile command {}: {e}", path.display());
+        }
+    }
+}
+
+/// Deploy DeepLab-owned native dsh presets into the app-private writable
+/// roster. Each child must contain `agent.cordis.yml`; same-named app presets
+/// are refreshed at startup, while user presets are left untouched.
+fn deploy_agent_presets(app: &AppHandle, dsh_home: &Path) {
+    let Ok(src) = app
+        .path()
+        .resolve("profile/presets", tauri::path::BaseDirectory::Resource)
+    else {
+        return;
+    };
+    if !src.is_dir() {
+        return;
+    }
+    let dst = dsh_home.join(".agent-presets");
+    let Ok(entries) = std::fs::read_dir(&src) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() || !path.join("agent.cordis.yml").is_file() {
             continue;
         }
-        let Ok(entries) = std::fs::read_dir(&src) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() || path.extension() != Some(std::ffi::OsStr::new("md")) {
-                continue;
+        let target = dst.join(entry.file_name());
+        let result = (|| -> std::io::Result<()> {
+            if target.exists() {
+                std::fs::remove_dir_all(&target)?;
             }
-            let Some(name) = path.file_name() else { continue };
-            if let Err(e) = std::fs::copy(&path, dst.join(name)) {
-                eprintln!("failed to deploy profile {dir} {}: {e}", path.display());
-            }
+            copy_dir(&path, &target)
+        })();
+        if let Err(e) = result {
+            eprintln!("failed to deploy agent preset {}: {e}", path.display());
         }
     }
 }
@@ -1048,8 +1073,9 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     // "read images through the image-tools skill" is code-enforced here, not
     // just documented). Non-clobbering: an edited MEMORY.md is left alone.
     ensure_global_memory(app);
-    // The reviewer agent and its commands, same profile, same refresh-on-start.
-    deploy_profile_prompts(app);
+    // DeepLab commands and native dsh presets, refreshed on every start.
+    deploy_profile_commands(app);
+    deploy_agent_presets(app, &dsh_home);
     // Secrets live under the runtime root (provider/connector keys) —
     // owner-only on every start, so existing installs are repaired and whatever
     // the sidecar later rewrites inside stays unreachable to other users

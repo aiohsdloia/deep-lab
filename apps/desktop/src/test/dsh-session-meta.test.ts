@@ -33,6 +33,7 @@ describe("DshRuntime session list meta", () => {
             updatedAt: 1,
             running: false,
             blank: false,
+            agentPreset: "code",
             projections: { values: { title: "递归概念解释详解" } },
           },
           { sessionId: "s2", updatedAt: 2, running: false, blank: false },
@@ -42,6 +43,7 @@ describe("DshRuntime session list meta", () => {
     });
     const sessions = await rt.listSessions();
     expect(sessions.map((s) => s.title)).toEqual(["递归概念解释详解", "s2"]);
+    expect(sessions[0]?.agentPreset).toBe("code");
   });
 
   it("keeps archived sessions out of the active list", async () => {

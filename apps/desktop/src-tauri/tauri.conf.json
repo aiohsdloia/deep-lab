@@ -51,7 +51,7 @@
       "../../../runtime/skills/external/anthropic-skills": "skills-office/",
       "../../../runtime/skills/external/agent-browser": "skills-agent-browser/",
       "../../../runtime/skills/core": "skills-core/",
-      "../../../runtime/dsh-profile/agent": "profile/agent/",
+      "../../../runtime/dsh-profile/presets": "profile/presets/",
       "../../../runtime/dsh-profile/command": "profile/command/",
       "../../../runtime/harness": "harness/",
       "../../../examples/climate-trends": "examples/climate-trends/",

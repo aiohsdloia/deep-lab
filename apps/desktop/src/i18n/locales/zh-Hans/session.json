@@ -74,9 +74,10 @@
     },
     "agent": {
       "aria": "代理模式",
-      "title": "先规划还是直接执行",
-      "menuAria": "代理模式",
-      "menuTitle": "让代理怎么工作？",
+      "title": "为新会话选择 DSH 代理预设",
+      "lockedTitle": "会话开始后，代理预设由 DSH 固定",
+      "menuAria": "代理预设",
+      "menuTitle": "选择此会话的代理预设",
       "build": {
         "label": "执行",
         "description": "编辑文件并运行命令"

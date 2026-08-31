@@ -308,6 +308,95 @@ describe("dsh 0.1.1 RPC contract", () => {
     ]);
   });
 
+  it("selects a dsh agent preset before the first prompt and does not reselect it", async () => {
+    const { runtime, calls } = runtimeWith({
+      "session.create": () => ({ sessionId: "session-1", agentPreset: "standard" }),
+      "agentPreset.select": (payload) => ({ agentPreset: payload.agentPreset }),
+      "session.prompt": () => ({ accepted: true }),
+    });
+
+    const sessionId = await runtime.createSession();
+    await runtime.sendPrompt(sessionId, "Use code mode", "code");
+    await runtime.sendPrompt(sessionId, "Continue", "code");
+
+    expect(calls.map(({ method }) => method)).toEqual([
+      "session.create",
+      "agentPreset.select",
+      "session.prompt",
+      "session.prompt",
+    ]);
+    expect(calls[1]).toEqual({
+      method: "agentPreset.select",
+      payload: { sessionId: "session-1", agentPreset: "code" },
+    });
+  });
+
+  it("creates a reviewer session with its fixed preset already selected", async () => {
+    const { runtime, calls } = runtimeWith({
+      "session.create": (payload) => ({
+        sessionId: "review-1",
+        agentPreset: payload.agentPreset,
+      }),
+      "session.rename": () => ({ title: "Background review", seq: 1 }),
+      "session.prompt": () => ({ accepted: true }),
+    });
+
+    const sessionId = await runtime.createSession("Background review", "reviewer");
+    await runtime.sendPrompt(sessionId, "Review these files", "reviewer");
+
+    expect(calls[0]).toEqual({
+      method: "session.create",
+      payload: { agentPreset: "reviewer" },
+    });
+    expect(calls.map(({ method }) => method)).toEqual([
+      "session.create",
+      "session.rename",
+      "session.prompt",
+    ]);
+  });
+
+  it("maps dsh preset names and the runtime default into the agent catalog", async () => {
+    const { runtime } = runtimeWith({
+      "agentPreset.list": () => ({
+        presets: [
+          {
+            id: "standard",
+            trust: "system",
+            isDefault: true,
+            name: "Standard",
+            description: "Full agent runtime",
+          },
+          {
+            id: "code",
+            trust: "system",
+            isDefault: false,
+            name: "Code mode",
+            description: "Programmatic tool composition",
+          },
+        ],
+        authorable: true,
+        hasDocument: true,
+      }),
+    });
+
+    await expect(runtime.listAgents()).resolves.toEqual([
+      {
+        name: "standard",
+        label: "Standard",
+        description: "Full agent runtime",
+        mode: "preset",
+        isDefault: true,
+      },
+      {
+        name: "code",
+        label: "Code mode",
+        description: "Programmatic tool composition",
+        mode: "preset",
+        isDefault: false,
+      },
+    ]);
+  });
+
   it("configures and removes a custom OpenAI-compatible provider through dsh settings", async () => {
     const { runtime, calls } = runtimeWith({
       "settings.mutate": () => ({

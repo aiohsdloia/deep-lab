@@ -1,14 +1,14 @@
 // Auto-review on turn completion (#72): when a turn actually changed workspace
-// files, the bundled `reviewer` agent gets one read-only BACKGROUND turn in a
-// fork of the completed checkpoint. Its structured result is persisted back on
-// that checkpoint; the foreground session never takes the reviewer's lock.
+// files, the bundled `reviewer` agent gets one read-only BACKGROUND turn in an
+// independent session. Its structured result is persisted back on that
+// checkpoint; the foreground session never takes the reviewer's lock.
 //
 // Off by default. It costs a second model turn per file-changing turn, so it is
 // the user's call — and the gates below exist so it never doubles that cost on
 // turns where there is nothing to review.
 
-/** The reviewer agent the app deploys into the dsh profile
- *  (`runtime/dsh-profile/agent/reviewer.md`). */
+/** The reviewer preset deployed into the app-private dsh roster
+ *  (`runtime/dsh-profile/presets/reviewer/`). */
 export const REVIEWER_AGENT = "reviewer";
 
 export const AUTO_REVIEW_KEY = "ai4s.autoReview.v1";
@@ -22,17 +22,22 @@ export const AUTO_REVIEW_PROMPT =
   "Follow your output contract exactly: a short summary, then one `review` " +
   "fenced block as the last thing in the message.";
 
-/** Scope the background reviewer to files the completed turn actually changed.
- *  The fork already carries the parent conversation through that checkpoint;
- *  explicit paths keep a later foreground turn from silently widening scope. */
-export function autoReviewPrompt(paths: string[]): string {
-  if (paths.length === 0) return AUTO_REVIEW_PROMPT;
-  return (
-    `${AUTO_REVIEW_PROMPT}\n\n` +
-    "Checkpoint files reported by the completed turn:\n" +
-    paths.map((path) => `- ${path}`).join("\n") +
-    "\nReview this checkpoint only. Do not treat an absent Git HEAD or baseline as a finding by itself."
+/** Scope the independent reviewer session to files the completed turn actually
+ *  changed; explicit paths keep a later foreground turn from widening scope. */
+export function autoReviewPrompt(paths: string[], request?: string): string {
+  const context = request?.trim().slice(0, 4000);
+  const sections = [AUTO_REVIEW_PROMPT];
+  if (context) sections.push(`Completed turn's user request:\n${context}`);
+  if (paths.length > 0) {
+    sections.push(
+      "Checkpoint files reported by the completed turn:\n" +
+        paths.map((path) => `- ${path}`).join("\n"),
+    );
+  }
+  sections.push(
+    "Review this checkpoint only. Do not treat an absent Git HEAD or baseline as a finding by itself.",
   );
+  return sections.join("\n\n");
 }
 
 /** Tools whose success means a workspace file changed. `bash` is deliberately

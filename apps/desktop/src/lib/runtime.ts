@@ -791,9 +791,9 @@ export const DRAFT_KEY = "draft";
  *  create their own session on first send — instead of sharing DRAFT_KEY. */
 export const draftKeyFor = (leafId: string): string => `draft:${leafId}`;
 
-/** The composer's agent switch: "build" edits and runs; "plan" is dsh's
- *  read-only planning agent (edits denied except its plan .md file). */
-export type AgentMode = "build" | "plan";
+/** Runtime agent/preset id. OpenCode commonly reports "build" / "plan";
+ *  dsh reports session-fixed presets such as "standard" / "code". */
+export type AgentMode = string;
 export type ApprovalMode = "approve" | "full";
 
 function approvalModeOfPreset(preset: string): ApprovalMode | null {
@@ -1585,7 +1585,7 @@ function finishAutoReview(
   return true;
 }
 
-/** Release a review that was cancelled while its hidden fork was still being
+/** Release a review that was cancelled while its hidden session was still being
  * prepared. A later queued review may start only if auto-review is still on. */
 function releaseAutoReviewReservation(set: StoreSet, get: StoreGet, sid: string): void {
   if (reviewInFlight === sid) reviewInFlight = null;
@@ -1597,8 +1597,9 @@ function releaseAutoReviewReservation(set: StoreSet, get: StoreGet, sid: string)
   drainReviewQueue(set, get);
 }
 
-/** Run the reviewer in a hidden fork of the completed parent checkpoint. The
- *  parent remains idle and usable while this independent session streams. */
+/** Run the reviewer in a hidden, read-only preset session in the same workspace.
+ *  dsh locks presets after the first turn, so a fork of the completed parent
+ *  cannot be changed from its inherited preset to `reviewer`. */
 async function startAutoReview(
   set: StoreSet,
   get: StoreGet,
@@ -1626,14 +1627,15 @@ async function startAutoReview(
     }
     const checkpoint = checkpointAt >= 0 ? messages[checkpointAt]?.id : undefined;
     if (!checkpoint) throw new Error("The completed checkpoint has no assistant message id");
-    // Fork's boundary is exclusive. A newer user message may already exist if
-    // the foreground continued immediately; stop before it so the completed
-    // assistant checkpoint is included and the newer turn is not.
-    const boundary = messages.slice(checkpointAt + 1).find((message) => !!message.id)?.id;
     let checkpointUserMessageId: string | undefined;
+    let checkpointRequest: string | undefined;
     for (let i = checkpointAt - 1; i >= 0; i--) {
       if (messages[i]?.role === "user" && messages[i]?.id) {
         checkpointUserMessageId = messages[i]!.id;
+        checkpointRequest = messages[i]!.parts
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n");
         break;
       }
     }
@@ -1642,9 +1644,10 @@ async function startAutoReview(
       return;
     }
 
-    // Forking gives the reviewer the completed plan, prompts and response while
-    // keeping its reasoning/tools out of the foreground transcript.
-    reviewSid = await runtime.forkSession(sid, boundary);
+    // Select the reviewer at creation. Selecting it later would fail with
+    // dsh's agent-preset-locked error, and running the review under `standard`
+    // would silently lose the reviewer's read-only safety policy.
+    reviewSid = await runtime.createSession("Background review", REVIEWER_AGENT);
     if (!get().autoReview || reviewInFlight !== sid) {
       void runtime.abortSession(reviewSid).catch(() => {});
       releaseAutoReviewReservation(set, get, sid);
@@ -1668,22 +1671,25 @@ async function startAutoReview(
               id: reviewSid!,
               title: "Background review",
               parentId: sid,
+              agentPreset: REVIEWER_AGENT,
               directory: parent?.directory,
               created: Date.now(),
               updated: Date.now(),
             },
           ],
     }));
-    void runtime.renameSession(reviewSid, "Background review").catch(() => {});
     await runtime.setSessionArchived(reviewSid, true).catch((err) =>
       logDebug(
         `auto-review child not archived: ${err instanceof Error ? err.message : String(err)}`,
       ),
     );
-    // No model or effort is passed on purpose: the reviewer's own model and
-    // reasoning effort come from its per-agent config (#71), and an explicit
-    // per-turn model would override exactly that setting.
-    await runtime.sendPrompt(reviewSid, autoReviewPrompt(paths), REVIEWER_AGENT);
+    // No model or effort is passed on purpose: the independent review session
+    // uses dsh's configured default route, so auto-review stays model-agnostic.
+    await runtime.sendPrompt(
+      reviewSid,
+      autoReviewPrompt(paths, checkpointRequest),
+      REVIEWER_AGENT,
+    );
     void logDebug(`auto-review ${reviewSid} → ${sid}`);
   } catch (err) {
     void logDebug(`auto-review failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1828,8 +1834,19 @@ function variantExposed(
     ?.models.find((mm) => mm.id === model.slice(i + 1));
   return m?.variants?.includes(variant) ? variant : undefined;
 }
-/** dsh's primary agent when the composer is not in plan mode. */
+/** Legacy OpenCode primary agent, retained as a fallback for old catalogs. */
 export const PRIMARY_AGENT = "build";
+
+/** The runtime's declared default preset, with the OpenCode primary as a
+ *  compatibility fallback when an older catalog has no explicit marker. */
+export function defaultAgentName(agents: AgentInfo[]): string | null {
+  return (
+    agents.find((agent) => agent.isDefault)?.name ??
+    agents.find((agent) => agent.name === PRIMARY_AGENT)?.name ??
+    agents.find((agent) => agent.mode !== "subagent")?.name ??
+    null
+  );
+}
 
 /**
  * Which agent will actually run this pane's next turn, or null when the catalog
@@ -1840,8 +1857,9 @@ export function agentForTurn(
   state: Pick<RuntimeState, "sessionAgents" | "agents">,
   key: string,
 ): string | null {
-  const name = state.sessionAgents[key] === "plan" ? "plan" : PRIMARY_AGENT;
-  return state.agents.some((a) => a.name === name) ? name : null;
+  const selected = state.sessionAgents[key];
+  if (selected && state.agents.some((agent) => agent.name === selected)) return selected;
+  return defaultAgentName(state.agents);
 }
 
 /** The model + reasoning effort for a session's turn: its own per-pane override
@@ -2708,13 +2726,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               return {};
             });
           }
-          // A user message names its agent. This is how the pill follows
-          // dsh's own plan_exit "Yes" (it injects a build user message)
-          // — and it self-confirms our own sends. Any OTHER agent (the auto-review
-          // turn's `reviewer`, or a custom primary) is left alone: the pill only
-          // speaks for the two modes it can actually show, and must not claim
-          // "Build" because a turn the user did not send ran on something else.
-          if (event.agent === "plan" || event.agent === "build") {
+          // OpenCode user messages name their agent; update only when that id is
+          // in the live catalog. dsh restores its session-fixed preset from
+          // session.list instead because its user history rows omit the preset.
+          if (event.agent && get().agents.some((agent) => agent.name === event.agent)) {
             const mode: AgentMode = event.agent;
             if (get().sessionAgents[event.sessionId] !== mode)
               set((s) => ({
@@ -3230,7 +3245,12 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         // The list also names each subagent session's parent — the recovery
         // path for parent links after a reload (no live task event to learn from).
         const sessionParents = { ...s.sessionParents };
+        const sessionAgents = { ...s.sessionAgents };
         for (const m of sessions) if (m.parentId) sessionParents[m.id] = m.parentId;
+        // dsh owns this value and fixes it after the first prompt. Seed the
+        // composer from the runtime summary instead of guessing build/plan from
+        // history rows, which do not carry a preset in dsh.
+        for (const m of sessions) if (m.agentPreset) sessionAgents[m.id] = m.agentPreset;
         // Overlay in-flight/persistent moves: a refresh that resolves before the
         // sidecar committed a moveSession — or that can NEVER be committed (a
         // cross-project move the sidecar refuses) — must not revert the session
@@ -3240,7 +3260,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           if (!override || override === m.directory) return m;
           return { ...m, directory: override };
         });
-        return { sessions: out, sessionParents };
+        return { sessions: out, sessionParents, sessionAgents };
       });
     } catch {
       /* ignore transient list failures */
@@ -3494,7 +3514,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         // Seed the agent pill from history: a session that was planning when
         // the app closed (or whose plan_exit flip fell into an SSE gap) must
         // reopen in the mode the server is actually in.
-        sessionAgents: { ...s.sessionAgents, [id]: lastAgentMode(messages) },
+        sessionAgents: {
+          ...s.sessionAgents,
+          [id]: lastAgentMode(
+            messages,
+            s.sessionAgents[id] ?? defaultAgentName(s.agents) ?? PRIMARY_AGENT,
+          ),
+        },
         // …and seed the running lock the same way. The locks are in-memory, so
         // a session still mid-answer would otherwise reopen with no "Working…"
         // and no way to stop it — a silent long tool call streams no event to
@@ -3536,7 +3562,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       else unmarkInterrupted(id);
       set((s) => ({
         threads: { ...s.threads, [id]: { ...historyToThread(messages, s.commands), loaded: true } },
-        sessionAgents: { ...s.sessionAgents, [id]: lastAgentMode(messages) },
+        sessionAgents: {
+          ...s.sessionAgents,
+          [id]: lastAgentMode(
+            messages,
+            s.sessionAgents[id] ?? defaultAgentName(s.agents) ?? PRIMARY_AGENT,
+          ),
+        },
         // Same server-truth seeding as openSession — a background pane must not
         // adopt a still-running session as idle (#59). The proof timer drops a
         // turn orphaned by an app restart back to stopped.
@@ -3711,9 +3743,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       saveRecord(QUEUES_KEY, queues);
       return { queues };
     });
-    const mode = s.sessionAgents[sid];
-    const agent =
-      mode === "plan" && s.agents.some((a) => a.name === "plan") ? "plan" : undefined;
+    const agent = agentForTurn(s, sid) ?? undefined;
     // performTurn echoes the prompt into the thread, locks the composer and
     // folds the queued turn exactly like a manual send — target pins the
     // session so no new session is ever created for a queue item.
@@ -3737,14 +3767,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   sendPrompt: (text, sessionId, draftKey, attachments) => {
     // Capture the mode BEFORE performTurn: on a draft, currentId is still null
     // here (the session is created inside), so this reads the pane's draft slot
-    // correctly. Pin "plan" only when the catalog actually has it — a stale mode
-    // against an older/custom sidecar must not fail every send with "Agent not
-    // found".
+    // correctly. Resolve the preset against the live catalog so stale state
+    // falls back to the runtime default instead of failing every send.
     const s = get();
     const key = sessionId ?? draftKey ?? s.currentId ?? DRAFT_KEY;
-    const mode = s.sessionAgents[key];
-    const agent =
-      mode === "plan" && s.agents.some((a) => a.name === "plan") ? "plan" : undefined;
+    const agent = agentForTurn(s, key) ?? undefined;
     // This pane's own model + effort (falling back to the global default),
     // captured now so a draft's later graft still sends the pane's choice.
     // Image turns route to the image-understanding model when one is configured.
@@ -3926,7 +3953,13 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               [sid]: { ...historyToThread(messages, s.commands), loaded: true },
             },
             // Same for the agent pill (a plan_exit flip may have been missed).
-            sessionAgents: { ...s.sessionAgents, [sid]: lastAgentMode(messages) },
+            sessionAgents: {
+              ...s.sessionAgents,
+              [sid]: lastAgentMode(
+                messages,
+                s.sessionAgents[sid] ?? defaultAgentName(s.agents) ?? PRIMARY_AGENT,
+              ),
+            },
           };
         });
         // The turn is over (its idle was missed) — let a waiting prompt queue
@@ -4448,18 +4481,20 @@ function mapToolStatus(status?: string): ToolCallStatus {
 }
 
 /** Convert loaded message history into thread blocks. */
-/** The agent mode a session's history says it is in: the last user message's
- *  agent (upstream stamps every user message; unknown agents read as build). */
-export function lastAgentMode(messages: HistoryMessage[]): AgentMode {
+/** The agent mode a session's history says it is in. OpenCode stamps user
+ *  messages; dsh does not, so callers pass the session summary's preset. */
+export function lastAgentMode(
+  messages: HistoryMessage[],
+  fallback: AgentMode = PRIMARY_AGENT,
+): AgentMode {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    // Only the two modes the pill can show count. A turn on any other agent —
-    // the auto-review's `reviewer`, a custom primary — says nothing about which
-    // mode the user left the composer in, so it is skipped rather than read as
-    // Build (which would silently drop a session out of Plan mode on reload).
-    if (m.role === "user" && (m.agent === "plan" || m.agent === "build")) return m.agent;
+    // OpenCode's build/plan switch is encoded on messages. Other agents (for
+    // example a reviewer turn) must not replace the session preset supplied as
+    // the fallback; dsh keeps that preset in session.list instead.
+    if (m.role === "user" && (m.agent === "build" || m.agent === "plan")) return m.agent;
   }
-  return "build";
+  return fallback;
 }
 
 export function historyToThread(messages: HistoryMessage[], commands?: CommandInfo[]): FoldState {

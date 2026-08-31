@@ -7,7 +7,7 @@ modify a user's global Harness installation.
 ## Contents
 
 ```text
-agent/             # dsh agent presets
+presets/           # native dsh agent presets (`agent.cordis.yml` per directory)
 command/           # dsh slash commands
 ```
 

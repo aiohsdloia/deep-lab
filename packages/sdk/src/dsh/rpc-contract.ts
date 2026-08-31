@@ -63,6 +63,10 @@ export interface DshRpcContract {
       hasDocument: boolean;
     }
   >;
+  "agentPreset.select": Rpc<
+    { sessionId: string; agentPreset: string },
+    { agentPreset: string }
+  >;
   "goal.create": Rpc<
     { sessionId: string; objective: string; maxGoalRounds?: number },
     { ref: GoalRef }

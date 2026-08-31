@@ -74,9 +74,10 @@
     },
     "agent": {
       "aria": "Agent mode",
-      "title": "Plan first or build right away",
-      "menuAria": "Agent modes",
-      "menuTitle": "How should the agent work?",
+      "title": "Choose the agent preset for this new session",
+      "lockedTitle": "The agent preset is fixed after the session starts",
+      "menuAria": "Agent presets",
+      "menuTitle": "Agent preset for this session",
       "build": {
         "label": "Build",
         "description": "Edits files and runs commands"

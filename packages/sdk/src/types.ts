@@ -270,6 +270,9 @@ export interface SessionMeta {
   id: string;
   title: string;
   slug?: string;
+  /** Session-fixed agent preset reported by the runtime (for dsh, e.g.
+   *  "standard" or "code"). */
+  agentPreset?: string;
   /** Workspace folder this session operates in (absolute path). */
   directory?: string;
   /** Set on subagent sessions: the session whose task tool spawned this one. */
@@ -313,8 +316,12 @@ export interface SkillInfo {
 
 export interface AgentInfo {
   name: string;
+  /** Human-readable preset name; `name` remains the stable runtime id. */
+  label?: string;
   description: string;
   mode?: string;
+  /** True for the preset new runtime sessions start with. */
+  isDefault?: boolean;
 }
 
 /** A slash command the runtime can run. GET /command merges every source:

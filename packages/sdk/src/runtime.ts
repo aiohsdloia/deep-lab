@@ -45,8 +45,9 @@ export interface AgentRuntime {
   getCapabilities(): Readonly<RuntimeCapabilities>;
 
   // ---- sessions (a conversation) ----
-  /** Create a session, optionally giving the runtime a concise initial title. */
-  createSession(title?: string): Promise<string>;
+  /** Create a session, optionally giving it a concise title and an agent preset.
+   *  Runtimes with session-fixed presets must apply it at creation time. */
+  createSession(title?: string, agentPreset?: string): Promise<string>;
   /** Fork a conversation, optionally stopping before `beforeMessageId`.
    *  Without a boundary the child receives the full current context. */
   forkSession(sessionId: string, beforeMessageId?: string): Promise<string>;
