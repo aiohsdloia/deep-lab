@@ -36,7 +36,8 @@
       "default": "Ask anything",
       "arguments": "Arguments (optional) — Enter to run",
       "shell": "Run a shell command in the workspace folder",
-      "plan": "Describe what to plan — no files will be changed"
+      "plan": "Describe what to plan — no files will be changed",
+      "modelRequired": "Connect a model to start"
     },
     "commandsAria": "Commands",
     "source": {
@@ -177,6 +178,11 @@
       "bodySuffix": " and connect."
     },
     "connect": "Connect",
+    "modelSetup": {
+      "title": "Connect a model before starting",
+      "body": "Add a DeepSeek API key or a lab OpenAI-compatible endpoint. Credentials stay in the DSH credential store.",
+      "action": "Model settings"
+    },
     "latest": "Latest",
     "subagentFallback": "a subagent",
     "header": {

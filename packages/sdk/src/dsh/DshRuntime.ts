@@ -680,11 +680,16 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     sessionId: string,
     text: string,
     _agent?: string,
-    _model?: string | null,
-    _variant?: string | null,
+    model?: string | null,
+    variant?: string | null,
     _clean?: boolean,
     files?: PromptFile[],
   ): Promise<void> {
+    // Model choice is session state in dsh, not part of session.prompt. Keep
+    // the product's per-pane picker truthful by applying it immediately before
+    // the turn instead of silently falling back to dsh's previous selection.
+    if (model) await this.models.selectForSession(sessionId, model, variant);
+
     const content: PromptContentPart[] = [{ type: "text", text }];
     for (const file of files ?? []) {
       const m = /^data:([^;,]+);base64,(.*)$/s.exec(file.url ?? "");

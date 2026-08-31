@@ -4,7 +4,10 @@
 // normal `pnpm test` run is unaffected.
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { DshRuntime } from "@deeplab/sdk";
+import { DshRuntime, type RuntimeEvent } from "@deeplab/sdk";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import WebSocket from "ws";
 
 const baseUrl = process.env.DSH_SMOKE_URL ?? "http://127.0.0.1:3089";
@@ -52,6 +55,113 @@ describe.skipIf(!(await reachable()))("DshRuntime live smoke", () => {
       rt.close();
     }
   }, 20_000);
+
+  it.skipIf(process.env.DSH_MODEL_SMOKE !== "1")(
+    "completes a credentialed model turn through the real dsh sidecar",
+    async () => {
+      const rt = new DshRuntime({
+        baseUrl,
+        directory: "/tmp/deeplab-model-smoke",
+        WebSocket: WebSocket as unknown as typeof globalThis.WebSocket,
+      });
+      let unsubscribe: () => void = () => undefined;
+      try {
+        await rt.connect();
+        const model = await rt.getDefaultModel();
+        expect(model).not.toBeNull();
+
+        const sid = await rt.createSession("model smoke");
+        const events: RuntimeEvent[] = [];
+        const idle = new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("model turn timed out")), 90_000);
+          unsubscribe = rt.onEvent((event) => {
+            if (event.sessionId !== sid) return;
+            events.push(event);
+            if (event.type === "error") {
+              clearTimeout(timer);
+              reject(new Error(event.message));
+            } else if (event.type === "session.idle") {
+              clearTimeout(timer);
+              resolve();
+            }
+          });
+        });
+
+        await rt.sendPrompt(
+          sid,
+          "Reply with exactly DEEPLAB_READY and no other text.",
+          undefined,
+          model,
+        );
+        await idle;
+
+        const answer = events
+          .filter((event) => event.type === "text.updated")
+          .map((event) => event.text)
+          .join("\n");
+        expect(answer).toContain("DEEPLAB_READY");
+      } finally {
+        unsubscribe();
+        rt.close();
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(process.env.DSH_AGENT_SMOKE !== "1")(
+    "runs a credentialed agent tool turn in an arbitrary workspace",
+    async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "deeplab-agent-smoke-"));
+      const rt = new DshRuntime({
+        baseUrl,
+        directory: workspace,
+        WebSocket: WebSocket as unknown as typeof globalThis.WebSocket,
+      });
+      let unsubscribe: () => void = () => undefined;
+      try {
+        await rt.connect();
+        const model = await rt.getDefaultModel();
+        expect(model).not.toBeNull();
+
+        const sid = await rt.createSession("agent smoke");
+        const toolEvents: RuntimeEvent[] = [];
+        const idle = new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("agent turn timed out")), 120_000);
+          unsubscribe = rt.onEvent((event) => {
+            if (event.sessionId !== sid) return;
+            if (event.type === "tool.updated") toolEvents.push(event);
+            if (event.type === "permission.asked") {
+              void rt.replyPermission(event.requestId, "once").catch(reject);
+            } else if (event.type === "error") {
+              clearTimeout(timer);
+              reject(new Error(event.message));
+            } else if (event.type === "session.idle") {
+              clearTimeout(timer);
+              resolve();
+            }
+          });
+        });
+
+        await rt.sendPrompt(
+          sid,
+          "Use a workspace file-writing tool to create readiness.txt containing exactly DEEPLAB_AGENT_READY followed by a newline. Then verify the file and finish.",
+          undefined,
+          model,
+        );
+        await idle;
+
+        expect(await readFile(join(workspace, "readiness.txt"), "utf8")).toBe(
+          "DEEPLAB_AGENT_READY\n",
+        );
+        expect(toolEvents.some((event) => event.type === "tool.updated")).toBe(true);
+      } finally {
+        unsubscribe();
+        rt.close();
+        await rm(workspace, { recursive: true, force: true });
+      }
+    },
+    150_000,
+  );
 
   it("adds and removes a custom provider through the live dsh settings seam", async () => {
     const rt = new DshRuntime({

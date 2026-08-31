@@ -267,6 +267,47 @@ describe("dsh 0.1.1 RPC contract", () => {
     });
   });
 
+  it("applies the requested session model and effort before prompting", async () => {
+    const { runtime, calls } = runtimeWith({
+      "session.selectModel": (payload) => ({
+        selected: {
+          provider: payload.provider,
+          model: payload.model,
+          reasoningEffort: payload.reasoningEffort,
+        },
+      }),
+      "session.prompt": () => ({ accepted: true }),
+    });
+
+    await runtime.sendPrompt(
+      "session-1",
+      "Check the result",
+      undefined,
+      "lab-local/deepseek-v4-flash",
+      "high",
+    );
+
+    expect(calls).toEqual([
+      {
+        method: "session.selectModel",
+        payload: {
+          sessionId: "session-1",
+          provider: "lab-local",
+          model: "deepseek-v4-flash",
+          reasoningEffort: "high",
+        },
+      },
+      {
+        method: "session.prompt",
+        payload: {
+          sessionId: "session-1",
+          mode: "queue",
+          content: [{ type: "text", text: "Check the result" }],
+        },
+      },
+    ]);
+  });
+
   it("configures and removes a custom OpenAI-compatible provider through dsh settings", async () => {
     const { runtime, calls } = runtimeWith({
       "settings.mutate": () => ({

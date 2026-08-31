@@ -10,6 +10,7 @@ import {
   FlaskConical,
   FolderOpen,
   History,
+  KeyRound,
   Loader2,
   NotebookPen,
   PanelBottom,
@@ -133,6 +134,8 @@ export function SessionView({
   const serverUrl = useRuntimeStore((s) => s.serverUrl);
   const sessions = useRuntimeStore((s) => s.sessions);
   const error = useRuntimeStore((s) => s.error);
+  const defaultModel = useRuntimeStore((s) => s.defaultModel);
+  const catalogLoaded = useRuntimeStore((s) => s.catalogLoaded);
   const questions = useRuntimeStore((s) => s.questions);
   const permissions = useRuntimeStore((s) => s.permissions);
   const sessionParents = useRuntimeStore((s) => s.sessionParents);
@@ -182,6 +185,7 @@ export function SessionView({
   const canSplit = !isGatewayWeb && !isMobile;
 
   const connected = status === "ready" || switching;
+  const modelRequired = connected && catalogLoaded && !defaultModel && !webReadOnly;
   const connecting = status === "connecting" && !switching;
   const displayStatus = switching ? "ready" : status;
 
@@ -835,7 +839,23 @@ export function SessionView({
                 {error}
               </div>
             )}
-            {connected && isEmpty && !eid && !webReadOnly && (
+            {modelRequired && (
+              <div className="flex items-start gap-3 rounded-input border border-border bg-surface px-4 py-3">
+                <KeyRound size={16} className="mt-0.5 shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-text">{t("live.modelSetup.title")}</div>
+                  <p className="mt-1 text-xs leading-5 text-muted">{t("live.modelSetup.body")}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/settings/models")}
+                  className="shrink-0 rounded-input bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
+                >
+                  {t("live.modelSetup.action")}
+                </button>
+              </div>
+            )}
+            {connected && !modelRequired && isEmpty && !eid && !webReadOnly && (
               <WorkflowStarters
                 onPick={(p, s) => void onStarterPick(p, s)}
                 examplesEnabled={isTauri && !isGatewayWeb}
@@ -1002,7 +1022,7 @@ export function SessionView({
               onRunCommand={(n, a) => void onRunCommand(n, a)}
               onInteract={pinEphemeral}
               commands={composerCommands}
-              disabled={!connected || working || webReadOnly}
+              disabled={!connected || working || webReadOnly || modelRequired}
               working={running}
               onStop={() => void interrupt(sid ?? undefined)}
               placeholder={
@@ -1010,6 +1030,8 @@ export function SessionView({
                   ? t("live.placeholder.readOnly")
                   : working
                     ? t("live.placeholder.waiting")
+                    : modelRequired
+                      ? t("composer.placeholder.modelRequired")
                     : !connected
                       ? t("live.placeholder.disconnected")
                       : planAvailable && agentMode === "plan"

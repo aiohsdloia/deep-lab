@@ -28,14 +28,25 @@ export class DshModelAdapter {
   }
 
   async setDefaultModel(modelKey: string): Promise<void> {
+    const sessionId = await this.anySessionId();
+    await this.selectForSession(sessionId, modelKey);
+  }
+
+  /** Apply the UI's per-session choice before the next dsh turn. */
+  async selectForSession(
+    sessionId: string,
+    modelKey: string,
+    reasoningEffort?: string | null,
+  ): Promise<void> {
     const [provider, ...modelParts] = modelKey.split("/");
     const model = modelParts.join("/");
     if (!provider || !model) throw new Error(`invalid model key: ${modelKey}`);
 
-    // dsh persists every successful session selection as the default for new
-    // sessions. One selected session is sufficient and avoids rewriting the
-    // durable model choice of unrelated existing conversations.
-    const sessionId = await this.anySessionId();
-    await this.api.call("session.selectModel", { sessionId, provider, model });
+    await this.api.call("session.selectModel", {
+      sessionId,
+      provider,
+      model,
+      ...(reasoningEffort ? { reasoningEffort } : {}),
+    });
   }
 }

@@ -36,7 +36,8 @@
       "default": "尽情提问",
       "arguments": "参数（可选）— 按 Enter 运行",
       "shell": "在工作区文件夹中运行 shell 命令",
-      "plan": "描述要规划的任务——不会改动任何文件"
+      "plan": "描述要规划的任务——不会改动任何文件",
+      "modelRequired": "请先连接模型"
     },
     "commandsAria": "命令",
     "source": {
@@ -177,6 +178,11 @@
       "bodySuffix": "并连接。"
     },
     "connect": "连接",
+    "modelSetup": {
+      "title": "开始前请先连接模型",
+      "body": "可以填写 DeepSeek API 密钥，或添加实验室 OpenAI 兼容接口。凭据只保存在 DSH 凭据存储中。",
+      "action": "模型设置"
+    },
     "latest": "最新消息",
     "subagentFallback": "一个子代理",
     "header": {

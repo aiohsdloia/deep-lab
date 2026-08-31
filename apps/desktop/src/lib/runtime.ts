@@ -347,6 +347,8 @@ interface RuntimeState {
   commands: CommandInfo[];
   /** Configured default model ("provider/model"), or null when unset. */
   defaultModel: string | null;
+  /** True after dsh's model/provider catalog completes a successful load. */
+  catalogLoaded: boolean;
   /** Apply a new default model and transparently reconnect (see impl). */
   setDefaultModel: (model: string) => Promise<void>;
   /** Connected providers and their models (from GET /config/providers, fetched
@@ -1908,6 +1910,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   agentVariants: {},
   commands: [],
   defaultModel: null,
+  catalogLoaded: false,
   providers: [],
   reasoningVariant: initialReasoningVariant(),
   setReasoningVariant: (variant) => {
@@ -2198,8 +2201,8 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
       // just-selected model.
       set(
         get().switching
-          ? { agents, commands, providers }
-          : { agents, defaultModel, commands, providers },
+          ? { agents, commands, providers, catalogLoaded: true }
+          : { agents, defaultModel, commands, providers, catalogLoaded: true },
       );
       // Make the configured multimodal models visible to the image-tools skill
       // even if the user never re-picks them after this feature landed.
@@ -3008,7 +3011,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
           const key = `${event.callId}:${input.path}`;
           if (recordedProvenance.has(key)) continue;
           remember(recordedProvenance, key);
-          void recordProvenance(input, sid, get().defaultModel);
+          void recordProvenance(input, sid, modelForSession(get(), sid).model);
         }
       }
       // A completed experiment execution (bash running code) becomes a run —
@@ -3021,7 +3024,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         const run = runInputFromEvent(event);
         if (run) {
           remember(recordedRuns, event.callId);
-          void recordRun(run, sid, get().defaultModel);
+          void recordRun(run, sid, modelForSession(get(), sid).model);
         }
       }
       if (event.type === "session.idle" && !backgroundReviewParent) {
