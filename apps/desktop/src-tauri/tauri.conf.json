@@ -44,6 +44,7 @@
     },
     "resources": {
       "../../../runtime/dsh": "dsh/",
+      "../../../runtime/dsh-plugins/whale-widget": "dsh-plugins/whale-widget/",
       "../../../runtime/dsh-acp": "dsh-acp/",
       "../../../runtime/browser-plugin": "browser-plugin/",
       "../../../runtime/tools": "tools/",

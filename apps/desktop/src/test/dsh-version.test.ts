@@ -30,4 +30,20 @@ describe("pinned DeepSeek Harness version", () => {
     };
     expect(manifest.dependencies?.["@deepseek-ai/dsh"]).toBe(DSH_VERSION);
   });
+
+  it("pins the optional whale widget source and license", () => {
+    const manifest = JSON.parse(read("runtime/dsh-plugins/whale-widget/package.json")) as {
+      name?: string;
+      version?: string;
+      license?: string;
+    };
+    const upstream = read("runtime/dsh-plugins/whale-widget/UPSTREAM");
+    expect(manifest).toMatchObject({
+      name: "dsh-whale-widget",
+      version: "0.2.10",
+      license: "MIT",
+    });
+    expect(upstream).toContain("4448c61db7d180c4c307aa3fa734db7c8507658d");
+    expect(read("runtime/dsh-plugins/whale-widget/LICENSE")).toContain("MIT License");
+  });
 });

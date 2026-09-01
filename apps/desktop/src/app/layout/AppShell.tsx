@@ -20,6 +20,7 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import { installAppMenu } from "@/lib/appMenu";
 import { isDetachedScreen, leaves, useLayoutStore, type SplitDir } from "@/lib/layout";
 import { useNativeContextMenuGuard } from "@/lib/nativeMenu";
+import { WhaleWidget } from "@/components/ui/WhaleWidget";
 
 export function AppShell() {
   const { t } = useTranslation("nav");
@@ -274,6 +275,7 @@ export function AppShell() {
       </main>
       <CommandPalette />
       <Toaster />
+      <WhaleWidget />
       {/* Sign-in for an interactively authenticated compute host (#73): app-wide,
           because the prompt has to reach the user wherever the need arose — the
           Settings card or the conversation the agent is working in. */}

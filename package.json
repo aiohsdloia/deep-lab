@@ -11,6 +11,7 @@
     "test:bci-demo": "python scripts/dev/test_bci_demo.py",
     "test:dsh-mcp": "node --test scripts/dev/test-dsh-mcp.mjs",
     "test:dsh-presets": "node --test scripts/dev/test-dsh-presets.mjs",
+    "test:dsh-whale": "node --test scripts/dev/test-dsh-whale.mjs",
     "typecheck": "pnpm --filter @deeplab/desktop typecheck",
     "lint": "pnpm --filter @deeplab/desktop lint"
   },

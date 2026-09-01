@@ -45,6 +45,7 @@ import { fallbackDefaultModel } from "@/components/settings/modelCatalog";
 import { VisionModelCard } from "@/components/settings/VisionModelCard";
 import { ModelSettingsCard } from "@/components/settings/ModelSettingsCard";
 import { MemoryCard } from "@/components/settings/MemoryCard";
+import { WhaleWidgetCard } from "@/components/settings/WhaleWidgetCard";
 import { Row, Section, Switch } from "@/components/settings/Section";
 import { resolveSection } from "@/components/settings/sections";
 import { chipCls, inputCls, selectCls } from "@/components/settings/inputCls";
@@ -873,6 +874,8 @@ export function SettingsPage() {
           </div>
         </Section>
         )}
+
+        {section === "appearance" && isTauri && <WhaleWidgetCard />}
 
       </div>
     </div>

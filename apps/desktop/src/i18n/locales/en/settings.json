@@ -35,6 +35,33 @@
       "reset": "Reset"
     }
   },
+  "whale": {
+    "title": "DeepSeek balance whale",
+    "hint": "Optional balance and usage monitor powered by the bundled DSH plugin",
+    "upstream": "MeteorNOX · MIT",
+    "enable": "Show the balance whale",
+    "enableHint": "Uses the DeepSeek API key already stored by dsh. The key is never sent to the DeepLab interface.",
+    "usageMode": "Usage source",
+    "ledger": "Balance ledger",
+    "ledgerHint": "Tracks today's usage from observed balance decreases. No additional credential is required.",
+    "token": "Platform token",
+    "tokenHint": "Queries DeepSeek's platform usage endpoint. This optional endpoint may change; the plugin falls back to the local ledger if it is unavailable.",
+    "tokenPlaceholder": "DeepSeek platform token",
+    "useToken": "Use token mode",
+    "tokenSaved": "Platform token stored in dsh; real-time usage mode is active.",
+    "summary": "DeepSeek usage",
+    "balance": "Balance",
+    "todayUsage": "Used today",
+    "lastTurn": "Last turn",
+    "pricing": "Pricing",
+    "peak": "Peak",
+    "offPeak": "Off-peak",
+    "noKey": "Configure the DeepSeek API key in Settings → Models to query balance and usage.",
+    "loading": "Waiting for the DeepSeek balance service.",
+    "open": "Open DeepSeek balance and usage",
+    "refresh": "Refresh balance and usage",
+    "close": "Close"
+  },
   "language": {
     "label": "Language"
   },

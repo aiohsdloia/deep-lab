@@ -472,6 +472,28 @@ fn v1(stream: &mut TcpStream, req: &Request, ctx: &Ctx, rest: &str) {
         ("GET", ["events"]) => {
             stream_api(stream, ctx, "/api/events.mux");
         }
+        ("GET", ["whale", "status"]) => match crate::whale_widget::status(&ctx.app) {
+            Ok(status) => respond_json(
+                stream,
+                200,
+                &serde_json::to_string(&status).unwrap_or_else(|_| "{}".into()),
+            ),
+            Err(error) => respond_json(stream, 500, &err_json(&error)),
+        },
+        ("GET", ["whale", "balance"]) => {
+            if crate::whale_widget::enabled(&ctx.app).unwrap_or(false) {
+                forward(stream, upstream_get(ctx, "/dsh-whale/balance.json", &[]));
+            } else {
+                respond_json(stream, 404, "{\"error\":\"whale widget is disabled\"}");
+            }
+        }
+        ("GET", ["whale", "last-turn"]) => {
+            if crate::whale_widget::enabled(&ctx.app).unwrap_or(false) {
+                forward(stream, upstream_get(ctx, "/dsh-whale/last-turn.json", &[]));
+            } else {
+                respond_json(stream, 404, "{\"error\":\"whale widget is disabled\"}");
+            }
+        }
         _ => respond_json(stream, 404, "{\"error\":\"not found\"}"),
     }
 }

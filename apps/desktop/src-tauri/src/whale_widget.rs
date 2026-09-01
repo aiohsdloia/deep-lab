@@ -1,0 +1,258 @@
+//! Optional DeepSeek balance and usage widget backed by a bundled dsh plugin.
+//!
+//! The plugin owns DeepSeek credential access and usage accounting. DeepLab
+//! only mounts it, proxies its JSON surface, and stores the opt-in flag.
+
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
+
+use crate::runtime::{self, RuntimeState};
+
+const STATE_VERSION: u32 = 1;
+const STATE_FILENAME: &str = "whale-widget.json";
+const PLUGIN_VERSION: &str = "0.2.10";
+const UPSTREAM_COMMIT: &str = "4448c61db7d180c4c307aa3fa734db7c8507658d";
+
+#[derive(Debug, Deserialize, Serialize)]
+struct WidgetState {
+    version: u32,
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetStatus {
+    enabled: bool,
+    plugin_version: &'static str,
+    upstream_commit: &'static str,
+}
+
+fn state_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime::runtime_root(app)?.join(STATE_FILENAME))
+}
+
+fn read_state(path: &Path) -> Result<WidgetState, String> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(WidgetState {
+                version: STATE_VERSION,
+                enabled: false,
+            });
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+    let state: WidgetState =
+        serde_json::from_str(&text).map_err(|error| format!("widget state parse: {error}"))?;
+    if state.version != STATE_VERSION {
+        return Err(format!(
+            "unsupported widget state version {}; expected {STATE_VERSION}",
+            state.version
+        ));
+    }
+    Ok(state)
+}
+
+fn write_state(path: &Path, state: &WidgetState) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "widget state has no parent directory".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let body = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, body).map_err(|error| error.to_string())?;
+    if std::fs::rename(&temporary, path).is_err() {
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(state).map_err(|e| e.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        let _ = std::fs::remove_file(&temporary);
+    }
+    runtime::tighten_private(path);
+    Ok(())
+}
+
+pub(crate) fn enabled(app: &AppHandle) -> Result<bool, String> {
+    Ok(read_state(&state_path(app)?)?.enabled)
+}
+
+pub(crate) fn status(app: &AppHandle) -> Result<WidgetStatus, String> {
+    Ok(WidgetStatus {
+        enabled: enabled(app)?,
+        plugin_version: PLUGIN_VERSION,
+        upstream_commit: UPSTREAM_COMMIT,
+    })
+}
+
+/// Cordis accepts an absolute module path. This keeps the vendored package out
+/// of dsh's mutable profile and avoids a network install at first enable.
+pub(crate) fn patch_entry(app: &AppHandle) -> Result<Option<Value>, String> {
+    if !enabled(app)? {
+        return Ok(None);
+    }
+    let plugin = app
+        .path()
+        .resolve(
+            "dsh-plugins/whale-widget/lib/index.js",
+            tauri::path::BaseDirectory::Resource,
+        )
+        .map_err(|error| format!("whale widget resource not found: {error}"))?;
+    if !plugin.is_file() {
+        return Err(format!(
+            "whale widget entry point is missing: {}",
+            plugin.display()
+        ));
+    }
+    let specifier = tauri::Url::from_file_path(&plugin).map_err(|_| {
+        format!(
+            "could not convert plugin path to a file URL: {}",
+            plugin.display()
+        )
+    })?;
+    Ok(Some(json!({
+        "id": "deeplab-whale-widget",
+        "name": specifier.as_str(),
+    })))
+}
+
+fn request_json(state: &RuntimeState, path: &str, body: Option<&Value>) -> Result<Value, String> {
+    let base = runtime::sidecar_url(state).ok_or_else(|| "runtime not started".to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let request = match body {
+        Some(value) => client
+            .put(format!("{base}{path}"))
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_string(value).map_err(|error| error.to_string())?),
+        None => client.get(format!("{base}{path}")),
+    };
+    let response = request.send().map_err(|error| error.to_string())?;
+    let status = response.status();
+    let text = response.text().map_err(|error| error.to_string())?;
+    let payload: Value =
+        serde_json::from_str(&text).map_err(|error| format!("widget response parse: {error}"))?;
+    if !status.is_success() {
+        return Err(format!("widget endpoint returned HTTP {status}: {payload}"));
+    }
+    Ok(payload)
+}
+
+#[tauri::command]
+pub fn whale_widget_status(app: AppHandle) -> Result<WidgetStatus, String> {
+    status(&app)
+}
+
+#[tauri::command(async)]
+pub fn set_whale_widget_enabled(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let path = state_path(&app)?;
+    let current = read_state(&path)?;
+    if current.enabled == enabled {
+        return Ok(());
+    }
+    write_state(
+        &path,
+        &WidgetState {
+            version: STATE_VERSION,
+            enabled,
+        },
+    )?;
+    crate::dsh_mcp::refresh_patch(&app)?;
+    runtime::restart_sidecar_if_running(&app, &state)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn whale_widget_balance(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+) -> Result<Value, String> {
+    if !enabled(&app)? {
+        return Err("whale widget is disabled".into());
+    }
+    request_json(&state, "/dsh-whale/balance.json", None)
+}
+
+#[tauri::command]
+pub fn whale_widget_last_turn(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+) -> Result<Value, String> {
+    if !enabled(&app)? {
+        return Err("whale widget is disabled".into());
+    }
+    request_json(&state, "/dsh-whale/last-turn.json", None)
+}
+
+#[tauri::command]
+pub fn whale_widget_config(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+) -> Result<Value, String> {
+    if !enabled(&app)? {
+        return Err("whale widget is disabled".into());
+    }
+    request_json(&state, "/dsh-whale/size.json", None)
+}
+
+#[tauri::command]
+pub fn set_whale_widget_usage_mode(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+    mode: String,
+) -> Result<Value, String> {
+    if mode != "ledger" && mode != "token" {
+        return Err("usage mode must be ledger or token".into());
+    }
+    if !enabled(&app)? {
+        return Err("whale widget is disabled".into());
+    }
+    let mut config = request_json(&state, "/dsh-whale/size.json", None)?;
+    let object = config
+        .as_object_mut()
+        .ok_or_else(|| "widget config is not an object".to_string())?;
+    object
+        .entry("scale".to_string())
+        .or_insert_with(|| json!(1.5));
+    object.insert("usageMode".to_string(), Value::String(mode));
+    request_json(&state, "/dsh-whale/size.json", Some(&config))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_defaults_off_and_round_trips() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "deeplab-whale-state-{}-{}.json",
+            std::process::id(),
+            unique
+        ));
+        let _ = std::fs::remove_file(&path);
+        assert!(!read_state(&path).unwrap().enabled);
+        write_state(
+            &path,
+            &WidgetState {
+                version: STATE_VERSION,
+                enabled: true,
+            },
+        )
+        .unwrap();
+        assert!(read_state(&path).unwrap().enabled);
+        let _ = std::fs::remove_file(path);
+    }
+}

@@ -27,6 +27,7 @@ mod science_mcp;
 mod settings_io;
 mod ssh_session;
 mod tools;
+mod whale_widget;
 #[cfg(target_os = "macos")]
 mod macos;
 mod uv;
@@ -128,6 +129,12 @@ pub fn run() {
             runtime::append_memory,
             runtime::get_memory_enabled,
             runtime::set_memory_enabled,
+            whale_widget::whale_widget_status,
+            whale_widget::set_whale_widget_enabled,
+            whale_widget::whale_widget_balance,
+            whale_widget::whale_widget_last_turn,
+            whale_widget::whale_widget_config,
+            whale_widget::set_whale_widget_usage_mode,
             runtime::get_agent_models,
             runtime::set_agent_model,
             runtime::get_agent_variants,

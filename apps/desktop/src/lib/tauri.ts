@@ -286,6 +286,96 @@ export async function removeConfigEntry(section: "provider" | "mcp", key: string
   await invoke("remove_config_entry", { section, key });
 }
 
+export interface WhaleWidgetStatus {
+  enabled: boolean;
+  pluginVersion: string;
+  upstreamCommit: string;
+}
+
+export const WHALE_WIDGET_CHANGED_EVENT = "deeplab:whale-widget-changed";
+
+export interface WhaleBalance {
+  ok: boolean;
+  code?: string;
+  error?: string;
+  stale?: boolean;
+  totalBalance?: number;
+  currency?: string;
+  todayUsage?: number;
+  usageMode?: "ledger" | "token";
+  isPeak?: boolean;
+  updatedAt?: string;
+}
+
+export interface WhaleLastTurn {
+  ok: boolean;
+  seq: number;
+  turn: number | null;
+  amount: number | null;
+  tokens: number | null;
+  ts: number | null;
+}
+
+export interface WhaleWidgetConfig {
+  usageMode?: "ledger" | "token";
+}
+
+export async function getWhaleWidgetStatus(): Promise<WhaleWidgetStatus> {
+  if (isGatewayWeb) {
+    return (
+      (await gatewayGet<WhaleWidgetStatus>("/v1/whale/status")) ?? {
+        enabled: false,
+        pluginVersion: "",
+        upstreamCommit: "",
+      }
+    );
+  }
+  if (!isTauri) return { enabled: false, pluginVersion: "", upstreamCommit: "" };
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<WhaleWidgetStatus>("whale_widget_status");
+}
+
+/** Enable the bundled plugin. The sidecar restarts; callers reconnect after it returns. */
+export async function setWhaleWidgetEnabled(enabled: boolean): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_whale_widget_enabled", { enabled });
+}
+
+export async function getWhaleBalance(): Promise<WhaleBalance> {
+  if (isGatewayWeb) {
+    const value = await gatewayGet<WhaleBalance>("/v1/whale/balance");
+    if (!value) throw new Error("whale balance is unavailable");
+    return value;
+  }
+  if (!isTauri) return { ok: false, code: "UNAVAILABLE" };
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<WhaleBalance>("whale_widget_balance");
+}
+
+export async function getWhaleLastTurn(): Promise<WhaleLastTurn> {
+  if (isGatewayWeb) {
+    const value = await gatewayGet<WhaleLastTurn>("/v1/whale/last-turn");
+    if (!value) throw new Error("whale usage is unavailable");
+    return value;
+  }
+  if (!isTauri) return { ok: true, seq: 0, turn: null, amount: null, tokens: null, ts: null };
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<WhaleLastTurn>("whale_widget_last_turn");
+}
+
+export async function getWhaleWidgetConfig(): Promise<WhaleWidgetConfig> {
+  if (!isTauri) return {};
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<WhaleWidgetConfig>("whale_widget_config");
+}
+
+export async function setWhaleWidgetUsageMode(mode: "ledger" | "token"): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("set_whale_widget_usage_mode", { mode });
+}
+
 export async function listDshMcpServers(): Promise<McpServer[]> {
   if (!isTauri) return [];
   const { invoke } = await import("@tauri-apps/api/core");

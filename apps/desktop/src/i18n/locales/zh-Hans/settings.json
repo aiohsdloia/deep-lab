@@ -35,6 +35,33 @@
       "reset": "复原"
     }
   },
+  "whale": {
+    "title": "DeepSeek 余额小鲸鱼",
+    "hint": "由内置 DSH 插件提供的可选余额与用量监控",
+    "upstream": "MeteorNOX · MIT",
+    "enable": "显示余额小鲸鱼",
+    "enableHint": "复用 dsh 已保存的 DeepSeek API Key，密钥不会传给 DeepLab 界面。",
+    "usageMode": "用量来源",
+    "ledger": "余额记账",
+    "ledgerHint": "根据观测到的余额下降累计今日用量，不需要额外凭据。",
+    "token": "平台 Token",
+    "tokenHint": "查询 DeepSeek 平台用量接口。该可选接口可能变化；不可用时插件会回退到本地记账。",
+    "tokenPlaceholder": "DeepSeek 平台 Token",
+    "useToken": "启用 Token 模式",
+    "tokenSaved": "平台 Token 已存入 dsh，实时用量模式已启用。",
+    "summary": "DeepSeek 用量",
+    "balance": "当前余额",
+    "todayUsage": "今日已用",
+    "lastTurn": "最近一轮",
+    "pricing": "当前价格",
+    "peak": "高峰",
+    "offPeak": "低谷",
+    "noKey": "请先在设置 → 模型中配置 DeepSeek API Key，再查询余额和用量。",
+    "loading": "正在等待 DeepSeek 余额服务。",
+    "open": "打开 DeepSeek 余额与用量",
+    "refresh": "刷新余额与用量",
+    "close": "关闭"
+  },
   "language": {
     "label": "语言"
   },

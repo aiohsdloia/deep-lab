@@ -267,7 +267,25 @@ pub(crate) fn refresh_patch(app: &AppHandle) -> Result<PathBuf, String> {
     let state = read_state(&state_path(app)?)?;
     let (node, wrapper, dsh_home) = launch_parts(app)?;
     let path = patch_path(app)?;
-    write_file(&path, &render_patch(&state, &node, &wrapper, &dsh_home)?)?;
+    let rendered = render_patch(&state, &node, &wrapper, &dsh_home)?;
+    let mut patch: Value = serde_json::from_str(&rendered).map_err(|e| e.to_string())?;
+    if let Some(entry) = crate::whale_widget::patch_entry(app)? {
+        let layers = patch
+            .as_array_mut()
+            .ok_or_else(|| "generated dsh patch is not an array".to_string())?;
+        if layers.is_empty() {
+            layers.push(json!({ "insert": [entry] }));
+        } else {
+            layers[0]["insert"]
+                .as_array_mut()
+                .ok_or_else(|| "generated dsh patch insert is not an array".to_string())?
+                .push(entry);
+        }
+    }
+    let body = serde_json::to_string_pretty(&patch)
+        .map(|body| format!("{body}\n"))
+        .map_err(|e| e.to_string())?;
+    write_file(&path, &body)?;
     Ok(path)
 }
 
