@@ -515,6 +515,33 @@ fn serve_whale_host(stream: &mut TcpStream, token: &str) {
 <body>
   <script>
     const base={base:?};
+    let lastHitReport='';
+    let lastHitSentAt=0;
+    function reportHitRegions(){{
+      const regions=[];
+      const add=element=>{{
+        if(!element) return;
+        const rect=element.getBoundingClientRect();
+        if(rect.width>0&&rect.height>0) regions.push({{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom}});
+      }};
+      const root=document.querySelector('.dshwv-root');
+      add(document.querySelector('.dshwv-img'));
+      const button=document.querySelector('.dshwv-menu-btn-visible');
+      if(button) add(button);
+      const bubble=document.querySelector('.dshwv-bubble-open');
+      if(bubble) add(bubble);
+      const menu=document.querySelector('.dshwv-menu-open');
+      if(menu) add(menu);
+      const body=JSON.stringify({{regions,dragging:!!(root&&root.classList.contains('dshwv-dragging'))}});
+      const now=performance.now();
+      if(body===lastHitReport&&now-lastHitSentAt<1000) return;
+      lastHitReport=body;
+      lastHitSentAt=now;
+      fetch(base+'/host-hit-regions.json',{{method:'POST',headers:{{'Content-Type':'application/json'}},body}})
+        .catch(error=>console.error('[deeplab-whale-hit]',error));
+    }}
+    setInterval(reportHitRegions,40);
+    window.addEventListener('resize',reportHitRegions);
     fetch(base+'/widget.js').then(response=>{{
       if(!response.ok) throw new Error('widget.js HTTP '+response.status);
       return response.text();
@@ -543,6 +570,12 @@ fn proxy_whale_runtime(stream: &mut TcpStream, req: &Request, ctx: &Ctx, rest: &
     }
     if req.method == "GET" && asset == "host.html" {
         return serve_whale_host(stream, provided_token);
+    }
+    if req.method == "POST" && asset == "host-hit-regions.json" {
+        return match crate::whale_widget::update_hit_regions(&ctx.app, &req.body) {
+            Ok(()) => respond_json(stream, 200, "{\"ok\":true}"),
+            Err(error) => respond_json(stream, 400, &err_json(&error)),
+        };
     }
     if ctx.read_only() && req.method != "GET" {
         return respond_json(stream, 403, "{\"error\":\"token is read-only\"}");

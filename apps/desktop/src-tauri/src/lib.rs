@@ -62,6 +62,7 @@ pub fn run() {
         .manage(ProvenanceState::default())
         .manage(runs::RunState::default())
         .manage(gateway::GatewayState::default())
+        .manage(whale_widget::WhaleWindowState::default())
         .manage(ssh_session::SshState::default())
         .setup(|app| {
             // Watch the active workspace so changes made outside the app (an

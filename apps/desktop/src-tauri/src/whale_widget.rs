@@ -6,7 +6,13 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 
 use crate::runtime::{self, RuntimeState};
 
@@ -15,8 +21,52 @@ const STATE_FILENAME: &str = "whale-widget.json";
 const PLUGIN_VERSION: &str = "0.2.10";
 const UPSTREAM_COMMIT: &str = "4448c61db7d180c4c307aa3fa734db7c8507658d";
 pub(crate) const WINDOW_LABEL: &str = "whale-widget";
-const WINDOW_SIZE: f64 = 500.0;
-const WINDOW_MARGIN: i32 = 24;
+const POINTER_POLL_INTERVAL: Duration = Duration::from_millis(16);
+const POINTER_EXIT_GRACE: Duration = Duration::from_millis(150);
+const HIT_REPORT_TTL: Duration = Duration::from_secs(2);
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HitRegion {
+    left: f64,
+    top: f64,
+    right: f64,
+    bottom: f64,
+}
+
+impl HitRegion {
+    fn is_valid(self) -> bool {
+        self.left.is_finite()
+            && self.top.is_finite()
+            && self.right.is_finite()
+            && self.bottom.is_finite()
+            && self.right > self.left
+            && self.bottom > self.top
+    }
+
+    fn contains(self, x: f64, y: f64) -> bool {
+        x >= self.left && x <= self.right && y >= self.top && y <= self.bottom
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct HitReport {
+    regions: Vec<HitRegion>,
+    dragging: bool,
+}
+
+#[derive(Default)]
+struct HitState {
+    regions: Vec<HitRegion>,
+    dragging: bool,
+    updated_at: Option<Instant>,
+}
+
+#[derive(Default)]
+pub struct WhaleWindowState {
+    hit: Mutex<HitState>,
+    pointer_router_running: AtomicBool,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct WidgetState {
@@ -127,9 +177,102 @@ pub fn whale_widget_status(app: AppHandle) -> Result<WidgetStatus, String> {
 }
 
 pub(crate) fn close_window(app: &AppHandle) {
+    reset_hit_regions(app);
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
         let _ = window.destroy();
     }
+}
+
+fn reset_hit_regions(app: &AppHandle) {
+    let state = app.state::<WhaleWindowState>();
+    *state.hit.lock().unwrap_or_else(|error| error.into_inner()) = HitState::default();
+}
+
+pub(crate) fn update_hit_regions(app: &AppHandle, body: &[u8]) -> Result<(), String> {
+    let mut report: HitReport =
+        serde_json::from_slice(body).map_err(|error| format!("invalid whale hit report: {error}"))?;
+    if report.regions.len() > 8 || report.regions.iter().any(|region| !region.is_valid()) {
+        return Err("invalid whale hit regions".to_string());
+    }
+    let state = app.state::<WhaleWindowState>();
+    let mut hit = state.hit.lock().unwrap_or_else(|error| error.into_inner());
+    hit.regions = std::mem::take(&mut report.regions);
+    hit.dragging = report.dragging;
+    hit.updated_at = Some(Instant::now());
+    Ok(())
+}
+
+fn start_pointer_router(app: &AppHandle) {
+    let state = app.state::<WhaleWindowState>();
+    if state.pointer_router_running.swap(true, Ordering::AcqRel) {
+        return;
+    }
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut ignoring_cursor = false;
+        let mut last_inside = None;
+        loop {
+            let Some(window) = app.get_webview_window(WINDOW_LABEL) else {
+                break;
+            };
+            let now = Instant::now();
+            let local_cursor = window
+                .cursor_position()
+                .ok()
+                .zip(window.outer_position().ok())
+                .zip(window.scale_factor().ok())
+                .map(|((cursor, origin), scale)| {
+                    (
+                        (cursor.x - f64::from(origin.x)) / scale,
+                        (cursor.y - f64::from(origin.y)) / scale,
+                    )
+                });
+            let (inside, dragging) = {
+                let state = app.state::<WhaleWindowState>();
+                let hit = state.hit.lock().unwrap_or_else(|error| error.into_inner());
+                let fresh = hit
+                    .updated_at
+                    .is_some_and(|updated_at| now.duration_since(updated_at) <= HIT_REPORT_TTL);
+                let inside = fresh
+                    && local_cursor.is_some_and(|(x, y)| {
+                        hit.regions.iter().any(|region| region.contains(x, y))
+                    });
+                (inside, fresh && hit.dragging)
+            };
+            if inside || dragging {
+                last_inside = Some(now);
+            }
+            let capture_cursor = inside
+                || dragging
+                || last_inside.is_some_and(|last| now.duration_since(last) <= POINTER_EXIT_GRACE);
+            if capture_cursor == ignoring_cursor {
+                ignoring_cursor = !capture_cursor;
+                let _ = window.set_ignore_cursor_events(ignoring_cursor);
+            }
+            std::thread::sleep(POINTER_POLL_INTERVAL);
+        }
+        app.state::<WhaleWindowState>()
+            .pointer_router_running
+            .store(false, Ordering::Release);
+    });
+}
+
+fn fit_window_to_work_area(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    let monitor = app
+        .get_webview_window("main")
+        .and_then(|main| main.current_monitor().ok().flatten())
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten())
+        .ok_or_else(|| "could not determine the whale widget display".to_string())?;
+    let area = monitor.work_area();
+    window
+        .set_position(PhysicalPosition::new(area.position.x, area.position.y))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_size(PhysicalSize::new(area.size.width, area.size.height))
+        .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -151,14 +294,20 @@ pub async fn show_whale_widget_window(
     .map_err(|error| format!("invalid whale widget URL: {error}"))?;
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
         let _ = window.remove_menu();
+        reset_hit_regions(&app);
         window.navigate(url).map_err(|error| error.to_string())?;
+        fit_window_to_work_area(&app, &window)?;
+        window
+            .set_ignore_cursor_events(true)
+            .map_err(|error| error.to_string())?;
         window.show().map_err(|error| error.to_string())?;
+        start_pointer_router(&app);
         return Ok(());
     }
 
     let window = WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::External(url))
         .title("DeepLab Whale")
-        .inner_size(WINDOW_SIZE, WINDOW_SIZE)
+        .inner_size(500.0, 500.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -175,17 +324,12 @@ pub async fn show_whale_widget_window(
     window
         .remove_menu()
         .map_err(|error| format!("could not remove whale widget menu: {error}"))?;
-
-    if let Ok(Some(monitor)) = window.current_monitor() {
-        let monitor_position = monitor.position();
-        let monitor_size = monitor.size();
-        let scale = monitor.scale_factor();
-        let physical_size = (WINDOW_SIZE * scale).round() as i32;
-        let x = monitor_position.x + monitor_size.width as i32 - physical_size - WINDOW_MARGIN;
-        let y = monitor_position.y + monitor_size.height as i32 - physical_size - WINDOW_MARGIN;
-        let _ = window.set_position(PhysicalPosition::new(x, y));
-    }
+    fit_window_to_work_area(&app, &window)?;
+    window
+        .set_ignore_cursor_events(true)
+        .map_err(|error| error.to_string())?;
     window.show().map_err(|error| error.to_string())?;
+    start_pointer_router(&app);
     Ok(())
 }
 
@@ -245,5 +389,19 @@ mod tests {
         .unwrap();
         assert!(read_state(&path).unwrap().enabled);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn hit_regions_reject_invalid_geometry_and_test_bounds() {
+        let region = HitRegion {
+            left: 10.0,
+            top: 20.0,
+            right: 110.0,
+            bottom: 120.0,
+        };
+        assert!(region.is_valid());
+        assert!(region.contains(10.0, 120.0));
+        assert!(!region.contains(9.0, 120.0));
+        assert!(!HitRegion { right: 10.0, ..region }.is_valid());
     }
 }
