@@ -1,12 +1,11 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRuntimeStore } from "@/lib/runtime";
-import { adaptWhaleWidgetScript } from "@/lib/tauri";
 import { WhaleWidget } from "./WhaleWidget";
 
 const whale = vi.hoisted(() => ({
   status: vi.fn(),
-  script: vi.fn(),
+  show: vi.fn(),
 }));
 
 vi.mock("@/lib/tauri", async (importOriginal) => {
@@ -14,7 +13,7 @@ vi.mock("@/lib/tauri", async (importOriginal) => {
   return {
     ...original,
     getWhaleWidgetStatus: whale.status,
-    getWhaleWidgetScript: whale.script,
+    showWhaleWidgetWindow: whale.show,
   };
 });
 
@@ -28,19 +27,15 @@ describe("WhaleWidget", () => {
       pluginVersion: "0.2.10",
       upstreamCommit: "4448c61",
     });
-    whale.script.mockResolvedValue(
-      "window.__dshWhaleWidget=true;document.body.dataset.whale='upstream';",
-    );
+    whale.show.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    document.getElementById("deeplab-upstream-whale-widget")?.remove();
-    delete document.body.dataset.whale;
     useRuntimeStore.setState(previous, true);
     vi.clearAllMocks();
   });
 
-  it("mounts the complete upstream client instead of rendering a replacement panel", async () => {
+  it("opens the standalone native host instead of injecting into DeepLab", async () => {
     let view: ReturnType<typeof render>;
     await act(async () => {
       view = render(<WhaleWidget />);
@@ -48,17 +43,10 @@ describe("WhaleWidget", () => {
     });
 
     await waitFor(() => {
-      expect(document.getElementById("deeplab-upstream-whale-widget")).not.toBeNull();
+      expect(whale.show).toHaveBeenCalledOnce();
     });
-    expect(whale.script).toHaveBeenCalledWith("http://127.0.0.1:4098");
+    expect(document.querySelector(".dshwv-root")).toBeNull();
     expect(document.body.textContent).not.toContain("Used today");
     view!.unmount();
-  });
-
-  it("rewrites only the plugin endpoint prefix for the protected gateway", () => {
-    const source = "window.__dshWhaleWidget=true;fetch('/dsh-whale/balance.json')";
-    expect(adaptWhaleWidgetScript(source, "http://127.0.0.1:4098/runtime/token")).toContain(
-      "fetch('http://127.0.0.1:4098/runtime/token/balance.json')",
-    );
   });
 });

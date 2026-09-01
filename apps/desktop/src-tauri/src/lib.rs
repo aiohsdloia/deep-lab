@@ -78,6 +78,20 @@ pub fn run() {
         // some machines (tao only re-applies it from drawRect). Re-pin on the
         // events that cover launch, resize, and the in-app theme switch.
         .on_window_event(|_window, _event| {
+            if _window.label() == "main"
+                && matches!(_event, tauri::WindowEvent::CloseRequested { .. })
+                && _window
+                    .app_handle()
+                    .get_webview_window(whale_widget::WINDOW_LABEL)
+                    .is_some()
+                && whale_widget::enabled(_window.app_handle()).unwrap_or(false)
+            {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                    api.prevent_close();
+                    let _ = _window.hide();
+                    return;
+                }
+            }
             #[cfg(target_os = "macos")]
             if matches!(
                 _event,
@@ -131,6 +145,7 @@ pub fn run() {
             runtime::set_memory_enabled,
             whale_widget::whale_widget_status,
             whale_widget::set_whale_widget_enabled,
+            whale_widget::show_whale_widget_window,
             runtime::get_agent_models,
             runtime::set_agent_model,
             runtime::get_agent_variants,

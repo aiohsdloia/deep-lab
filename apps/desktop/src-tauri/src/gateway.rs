@@ -500,6 +500,62 @@ fn whale_runtime_allowed(method: &str, asset: &str) -> bool {
     )
 }
 
+fn serve_whale_host(stream: &mut TcpStream, token: &str) {
+    let base = format!("/__deeplab/whale/{token}");
+    let html = format!(
+        r#"<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html,body{{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}}
+    #deeplab-whale-drag{{position:fixed;top:8px;left:8px;width:28px;height:28px;z-index:2147483647;border:0;border-radius:6px;background:rgba(32,49,112,.72);display:grid;place-items:center;cursor:move;opacity:.35;transition:opacity .15s}}
+    #deeplab-whale-drag:hover{{opacity:1}}
+    #deeplab-whale-drag span{{width:3px;height:3px;border-radius:50%;background:#fff;box-shadow:6px 0 #fff,0 6px #fff,6px 6px #fff}}
+  </style>
+</head>
+<body>
+  <button id="deeplab-whale-drag" data-tauri-drag-region title="Move widget" aria-label="Move widget"><span data-tauri-drag-region></span></button>
+  <script>
+    const base={base:?};
+    fetch(base+'/widget.js').then(response=>{{
+      if(!response.ok) throw new Error('widget.js HTTP '+response.status);
+      return response.text();
+    }}).then(source=>{{
+      if(!source.includes('window.__dshWhaleWidget')) throw new Error('unexpected widget client');
+      const script=document.createElement('script');
+      script.textContent=source.split('/dsh-whale/').join(base+'/');
+      document.body.appendChild(script);
+      let readinessAttempts=0;
+      const checkReadiness=()=>{{
+        readinessAttempts+=1;
+        const root=document.querySelector('.dshwv-root');
+        const image=document.querySelector('.dshwv-img');
+        const button=document.querySelector('.dshwv-menu-btn');
+        const menu=document.querySelector('.dshwv-menu');
+        const imageReady=Boolean(image&&image.complete&&image.naturalWidth>0);
+        if(button&&imageReady) button.click();
+        const menuWorks=Boolean(menu&&menu.classList.contains('dshwv-menu-open'));
+        if(button&&menuWorks) button.click();
+        if((!root||!imageReady||!menuWorks)&&readinessAttempts<16){{
+          window.setTimeout(checkReadiness,500);
+          return;
+        }}
+        const query=new URLSearchParams({{
+          root:root?'1':'0',image:imageReady?'1':'0',menu:menuWorks?'1':'0'
+        }});
+        fetch(base+'/ready?'+query).catch(()=>{{}});
+      }};
+      window.setTimeout(checkReadiness,500);
+    }}).catch(error=>console.error('[deeplab-whale]',error));
+  </script>
+</body>
+</html>"#
+    );
+    respond(stream, 200, "text/html; charset=utf-8", html.as_bytes());
+}
+
 fn proxy_whale_runtime(stream: &mut TcpStream, req: &Request, ctx: &Ctx, rest: &str) {
     let Some((provided_token, asset)) = rest.split_once('/') else {
         return respond_json(stream, 404, "{\"error\":\"not found\"}");
@@ -509,6 +565,21 @@ fn proxy_whale_runtime(stream: &mut TcpStream, req: &Request, ctx: &Ctx, rest: &
     }
     if !crate::whale_widget::enabled(&ctx.app).unwrap_or(false) {
         return respond_json(stream, 404, "{\"error\":\"whale widget is disabled\"}");
+    }
+    if req.method == "GET" && asset == "host.html" {
+        return serve_whale_host(stream, provided_token);
+    }
+    if req.method == "GET" && asset == "ready" {
+        crate::debug_log::append(
+            &ctx.app,
+            &format!(
+                "[whale] standalone client ready root={} image={} menu={}",
+                req.query_get("root").unwrap_or_default(),
+                req.query_get("image").unwrap_or_default(),
+                req.query_get("menu").unwrap_or_default()
+            ),
+        );
+        return respond_json(stream, 200, "{\"ok\":true}");
     }
     if ctx.read_only() && req.method != "GET" {
         return respond_json(stream, 403, "{\"error\":\"token is read-only\"}");

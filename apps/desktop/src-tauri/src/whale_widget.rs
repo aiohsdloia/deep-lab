@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::runtime::{self, RuntimeState};
 
@@ -14,6 +14,9 @@ const STATE_VERSION: u32 = 1;
 const STATE_FILENAME: &str = "whale-widget.json";
 const PLUGIN_VERSION: &str = "0.2.10";
 const UPSTREAM_COMMIT: &str = "4448c61db7d180c4c307aa3fa734db7c8507658d";
+pub(crate) const WINDOW_LABEL: &str = "whale-widget";
+const WINDOW_SIZE: f64 = 500.0;
+const WINDOW_MARGIN: i32 = 24;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct WidgetState {
@@ -123,6 +126,62 @@ pub fn whale_widget_status(app: AppHandle) -> Result<WidgetStatus, String> {
     status(&app)
 }
 
+pub(crate) fn close_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        let _ = window.destroy();
+    }
+}
+
+#[tauri::command]
+pub async fn show_whale_widget_window(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+) -> Result<(), String> {
+    if !enabled(&app)? {
+        return Err("whale widget is disabled".into());
+    }
+    let (gateway_url, token) = runtime::gateway_access(&state)
+        .ok_or_else(|| "runtime gateway is not ready".to_string())?;
+    let url = format!(
+        "{}/__deeplab/whale/{}/host.html",
+        gateway_url.trim_end_matches('/'),
+        token
+    )
+    .parse()
+    .map_err(|error| format!("invalid whale widget URL: {error}"))?;
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        window.navigate(url).map_err(|error| error.to_string())?;
+        window.show().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    let window = WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::External(url))
+        .title("DeepLab Whale")
+        .inner_size(WINDOW_SIZE, WINDOW_SIZE)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true)
+        .skip_taskbar(true)
+        .build()
+        .map_err(|error| format!("could not create whale widget window: {error}"))?;
+
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let monitor_position = monitor.position();
+        let monitor_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let physical_size = (WINDOW_SIZE * scale).round() as i32;
+        let x = monitor_position.x + monitor_size.width as i32 - physical_size - WINDOW_MARGIN;
+        let y = monitor_position.y + monitor_size.height as i32 - physical_size - WINDOW_MARGIN;
+        let _ = window.set_position(PhysicalPosition::new(x, y));
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 pub fn set_whale_widget_enabled(
     app: AppHandle,
@@ -132,6 +191,9 @@ pub fn set_whale_widget_enabled(
     let path = state_path(&app)?;
     let current = read_state(&path)?;
     if current.enabled == enabled {
+        if !enabled {
+            close_window(&app);
+        }
         return Ok(());
     }
     write_state(
@@ -143,6 +205,9 @@ pub fn set_whale_widget_enabled(
     )?;
     crate::dsh_mcp::refresh_patch(&app)?;
     runtime::restart_sidecar_if_running(&app, &state)?;
+    if !enabled {
+        close_window(&app);
+    }
     Ok(())
 }
 

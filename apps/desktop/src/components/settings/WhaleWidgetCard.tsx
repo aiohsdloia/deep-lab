@@ -35,11 +35,9 @@ export function WhaleWidgetCard() {
       await setWhaleWidgetEnabled(next);
       setEnabled(next);
       window.dispatchEvent(new CustomEvent(WHALE_WIDGET_CHANGED_EVENT, { detail: next }));
-      // The upstream client installs document-level listeners and intentionally
-      // has no unload API. Reloading gives enable and disable a clean lifecycle.
-      window.location.reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
       setBusy(false);
     }
   };

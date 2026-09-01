@@ -842,6 +842,16 @@ pub fn runtime_password(app: AppHandle) -> String {
     lifecycle.gateway_token.clone().unwrap_or_default()
 }
 
+/// Internal gateway address and token for native auxiliary windows.
+/// The token stays in Rust and is only embedded in the private loopback URL.
+pub(crate) fn gateway_access(state: &RuntimeState) -> Option<(String, String)> {
+    let lifecycle = state.lifecycle.lock().ok()?;
+    Some((
+        lifecycle.url.clone()?,
+        lifecycle.gateway_token.clone()?,
+    ))
+}
+
 pub(crate) fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .ok()

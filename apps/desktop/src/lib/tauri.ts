@@ -1,7 +1,7 @@
 // Thin bridge to the Tauri Rust side. In a plain browser these are no-ops so the
 // app still runs in `pnpm dev`; in the packaged desktop app they invoke Rust commands.
 
-import { gatewayGet, gatewayOrigin, gatewayToken, isGatewayWeb } from "./webMode";
+import { gatewayGet, isGatewayWeb } from "./webMode";
 import type { McpConfig, McpServer } from "@deeplab/sdk";
 
 export const isTauri =
@@ -316,22 +316,11 @@ export async function setWhaleWidgetEnabled(enabled: boolean): Promise<void> {
   await invoke("set_whale_widget_enabled", { enabled });
 }
 
-export function adaptWhaleWidgetScript(source: string, runtimeBase: string): string {
-  if (!source.includes("window.__dshWhaleWidget")) {
-    throw new Error("the dsh whale plugin returned an unexpected client script");
-  }
-  return source.split("/dsh-whale/").join(`${runtimeBase}/`);
-}
-
-/** Load the upstream plugin's complete browser client through the authenticated gateway. */
-export async function getWhaleWidgetScript(serverUrl: string): Promise<string> {
-  const token = isGatewayWeb ? gatewayToken() : await runtimePassword();
-  if (!token) throw new Error("the whale plugin gateway token is unavailable");
-  const gateway = (isGatewayWeb ? gatewayOrigin() : serverUrl).replace(/\/+$/, "");
-  const runtimeBase = `${gateway}/__deeplab/whale/${encodeURIComponent(token)}`;
-  const response = await fetch(`${runtimeBase}/widget.js`);
-  if (!response.ok) throw new Error(`whale plugin client returned HTTP ${response.status}`);
-  return adaptWhaleWidgetScript(await response.text(), runtimeBase);
+/** Show the native transparent window that hosts the complete upstream widget. */
+export async function showWhaleWidgetWindow(): Promise<void> {
+  if (!isTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("show_whale_widget_window");
 }
 
 export async function listDshMcpServers(): Promise<McpServer[]> {
