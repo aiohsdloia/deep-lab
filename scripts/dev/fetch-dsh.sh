@@ -26,6 +26,10 @@ cat > "$DIR/package.json" <<EOF
 }
 EOF
 
-(cd "$DIR" && npm install --no-save --no-package-lock)
+# Tauri copies resources as regular files and directories. pnpm-style links
+# are not preserved in Windows bundles, so always replace any existing tree
+# and use npm's link-free nested layout, including runtime peer dependencies.
+rm -rf "$DIR/node_modules"
+(cd "$DIR" && npm install --no-save --no-package-lock --install-strategy=nested)
 
 echo "done: dsh ${DSH_VERSION} installed at ${DIR}/node_modules/@deepseek-ai/dsh"

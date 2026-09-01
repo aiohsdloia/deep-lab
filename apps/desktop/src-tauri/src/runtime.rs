@@ -3,7 +3,7 @@
 // free port*, with an *app-private* DSH_HOME, and is killed on app exit.
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
@@ -1049,6 +1049,28 @@ fn system_proxy_url() -> Option<String> {
     None
 }
 
+fn drain_dsh_output<R>(app: AppHandle, mut output: R)
+where
+    R: std::io::Read + Send + 'static,
+{
+    tauri::async_runtime::spawn(async move {
+        let mut buf = [0u8; 4096];
+        loop {
+            match output.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    for line in String::from_utf8_lossy(&buf[..n]).split(['\n', '\r']) {
+                        let line = line.trim();
+                        if !line.is_empty() {
+                            crate::debug_log::append(&app, &format!("[dsh] {line}"));
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, String> {
     let root = runtime_root(app)?;
     let cfg = root.join("xdg-config");
@@ -1099,8 +1121,9 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
         .path()
         .resolve("dsh", tauri::path::BaseDirectory::Resource)
         .map_err(|e| format!("dsh resource not found: {e}"))?;
-    let cli = dsh_dir
-        .join("node_modules/@deepseek-ai/dsh/lib/bin.js");
+    // current_dir is the bundled dsh resource below, so a relative entry point
+    // avoids Windows command-line path rewriting while remaining deterministic.
+    let cli = "node_modules/@deepseek-ai/dsh/lib/bin.js";
     let node = std::env::var("DEEPLAB_NODE").unwrap_or_else(|_| "node".to_string());
     // Render the app-owned MCP inventory against this installation's current
     // Node and resource paths before every boot. App upgrades may move either.
@@ -1111,7 +1134,13 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
         .arg(&cli)
         .args(["--profile", "web", "--patch"])
         .arg(&mcp_patch)
-        .args(["--host", "127.0.0.1", "--port", port_str.as_str()])
+        .args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            port_str.as_str(),
+            "--no-open",
+        ])
         // App-private dirs: dsh never touches the user's ~/.dsh. DSH_AGENTS_HOME
         // isolates the user-level `~/.agents/skills` pack — a legacy Open Lab
         // install may carry Chinese-reviewed skills there that must not leak
@@ -1125,6 +1154,8 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
         .env("XDG_CACHE_HOME", cache.to_string_lossy().to_string())
         .env("XDG_STATE_HOME", state.to_string_lossy().to_string())
         .env("HOME", home)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         // Lets bundled skill helpers (e.g. remote-compute's record_run.py) stamp
         // the recording app version into provenance — they run outside the app
         // and can't otherwise know it.
@@ -1147,50 +1178,72 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     }
 
     let mut child = builder.spawn().map_err(|e| format!("failed to spawn dsh: {e}"))?;
-    // Drain the child's stderr so its buffer never blocks it, AND record the
-    // failure signals we used to discard. When the sidecar dies during
-    // bootstrap (config-merge abort, missing node, panic) the only symptom was
-    // a generic "Could not open dsh event stream" in the UI with no cause. Now
-    // stderr lines land in debug.log next to the frontend's connection attempts.
-    // Stdout is left to dsh's own logging.
-    let app = app.clone();
-    let stderr = child.stderr.take();
-    tauri::async_runtime::spawn(async move {
-        use std::io::Read;
-        let Some(mut stderr) = stderr else {
-            return;
-        };
-        let mut buf = [0u8; 4096];
-        loop {
-            match stderr.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    for line in String::from_utf8_lossy(&buf[..n]).split(['\n', '\r']) {
-                        let line = line.trim();
-                        if !line.is_empty() {
-                            crate::debug_log::append(&app, &format!("[dsh] {line}"));
-                        }
-                    }
-                }
-            }
-        }
-    });
+    // Drain both streams so a full pipe cannot block startup. dsh reports some
+    // launch failures on stdout, so both belong in the app's private debug log.
+    if let Some(stdout) = child.stdout.take() {
+        drain_dsh_output(app.clone(), stdout);
+    }
+    if let Some(stderr) = child.stderr.take() {
+        drain_dsh_output(app.clone(), stderr);
+    }
     Ok(child)
 }
 
 /// Poll the sidecar's HTTP surface until it answers (or a deadline passes).
-/// dsh takes a few seconds to boot (skill deployment + plugin load); callers
-/// that proxy to it must not fire before the socket listens.
-fn wait_for_sidecar(url: &str) -> Result<(), String> {
+/// A packaged cold start scans the complete bundled dependency and skill trees,
+/// which can take longer than a development start on Windows.
+fn wait_for_sidecar(url: &str, child: &mut std::process::Child) -> Result<(), String> {
     let authority = url.trim_start_matches("http://");
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let deadline = std::time::Instant::now() + Duration::from_secs(120);
     while std::time::Instant::now() < deadline {
         if TcpStream::connect(authority).is_ok() {
             return Ok(());
         }
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            return Err(format!("dsh sidecar exited before listening ({status})"));
+        }
         std::thread::sleep(Duration::from_millis(300));
     }
     Err("timed out waiting for the dsh sidecar to listen".into())
+}
+
+fn spawn_ready_sidecar(
+    app: &AppHandle,
+    preferred_port: Option<u16>,
+) -> Result<(std::process::Child, u16, String), String> {
+    const MAX_ATTEMPTS: usize = 3;
+    let mut port = preferred_port.unwrap_or_else(free_port);
+    let mut last_error = String::new();
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        let sidecar_url = format!("http://127.0.0.1:{port}");
+        match spawn_sidecar(app, port) {
+            Ok(mut child) => match wait_for_sidecar(&sidecar_url, &mut child) {
+                Ok(()) => return Ok((child, port, sidecar_url)),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    last_error = error;
+                }
+            },
+            Err(error) => last_error = error,
+        }
+        crate::debug_log::append(
+            app,
+            &format!(
+                "dsh start attempt {attempt}/{MAX_ATTEMPTS} failed on port {port}: {last_error}"
+            ),
+        );
+        let previous = port;
+        port = free_port();
+        while port == previous {
+            port = free_port();
+        }
+    }
+
+    Err(format!(
+        "dsh sidecar failed after {MAX_ATTEMPTS} attempts: {last_error}"
+    ))
 }
 
 /// Kill and respawn a running sidecar on its stable port. The existing gateway
@@ -1210,17 +1263,9 @@ pub(crate) fn restart_sidecar_if_running(
     let _ = child.wait();
     lifecycle.sidecar_url = None;
 
-    let port = *lifecycle.port.get_or_insert_with(free_port);
-    let mut child = spawn_sidecar(app, port).map_err(|error| {
-        lifecycle.url = None;
-        error
-    })?;
-    let sidecar_url = format!("http://127.0.0.1:{port}");
-    if let Err(error) = wait_for_sidecar(&sidecar_url) {
-        let _ = child.kill();
-        lifecycle.url = None;
-        return Err(format!("dsh sidecar failed to restart: {error}"));
-    }
+    let preferred_port = lifecycle.port;
+    let (mut child, port, sidecar_url) = spawn_ready_sidecar(app, preferred_port)
+        .map_err(|error| format!("dsh sidecar failed to restart: {error}"))?;
     let url = if let Some(url) = lifecycle.url.clone() {
         url
     } else {
@@ -1235,6 +1280,7 @@ pub(crate) fn restart_sidecar_if_running(
         lifecycle.gateway_token = Some(gw_token);
         format!("http://127.0.0.1:{gw_port}")
     };
+    lifecycle.port = Some(port);
     lifecycle.child = Some(child);
     lifecycle.sidecar_url = Some(sidecar_url);
     lifecycle.url = Some(url.clone());
@@ -1247,36 +1293,60 @@ pub(crate) fn restart_sidecar_if_running(
 #[tauri::command(async)]
 pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<String, String> {
     let mut lifecycle = state.lifecycle.lock().unwrap();
-    if let (Some(_), Some(url)) = (&lifecycle.child, &lifecycle.url) {
+    let child_running = match lifecycle.child.as_mut() {
+        Some(child) => match child.try_wait() {
+            Ok(None) => true,
+            Ok(Some(status)) => {
+                crate::debug_log::append(
+                    &app,
+                    &format!("dsh sidecar exited; restarting it ({status})"),
+                );
+                false
+            }
+            Err(error) => {
+                crate::debug_log::append(
+                    &app,
+                    &format!("could not inspect dsh sidecar; restarting it ({error})"),
+                );
+                false
+            }
+        },
+        None => false,
+    };
+    if child_running && lifecycle.url.is_some() {
+        let url = lifecycle.url.as_ref().unwrap();
         return Ok(url.clone());
     }
-    // Repair any impossible partial state left by an older build or a failed
-    // transition before attempting a fresh start.
+    // Repair an exited child or any impossible partial state left by an older
+    // build or failed transition. Keep a live gateway: it can proxy the newly
+    // spawned sidecar on the same stable port without changing the UI URL.
     if let Some(mut child) = lifecycle.child.take() {
         let _ = child.kill();
+        let _ = child.wait();
     }
-    lifecycle.url = None;
+    lifecycle.sidecar_url = None;
 
-    // Reuse a stable port across restarts so the frontend URL doesn't change.
-    let port = *lifecycle.port.get_or_insert_with(free_port);
-    let child = spawn_sidecar(&app, port)?;
-    let sidecar_url = format!("http://127.0.0.1:{port}");
-    // The sidecar takes a moment to boot (skill deployment + plugin load); the
-    // gateway must not proxy to a not-yet-listening socket (the WebView's first
-    // WS streams would be refused). Poll until its HTTP surface answers.
-    wait_for_sidecar(&sidecar_url).map_err(|e| format!("dsh sidecar failed to start: {e}"))?;
+    // Prefer the stable port, but retry with a fresh one when Windows hands the
+    // process a transiently unbindable port (observed as Node EACCES).
+    let preferred_port = lifecycle.port;
+    let (child, port, sidecar_url) = spawn_ready_sidecar(&app, preferred_port)?;
     // The desktop shell talks to the sidecar through a same-origin gateway:
     // the WebView origin (tauri://localhost) cannot reach the loopback sidecar
     // cross-origin (dsh's browser-trust fence), so the gateway serves the SPA
     // and proxies /api + the WebSocket streams at its own origin, and the
     // frontend authenticates with the returned token.
-    let gw_state = app.state::<crate::gateway::GatewayState>().inner();
-    let (gw_port, gw_token) = crate::gateway::start_internal(&app, gw_state)?;
-    let url = format!("http://127.0.0.1:{gw_port}");
+    let url = if let Some(url) = lifecycle.url.clone() {
+        url
+    } else {
+        let gw_state = app.state::<crate::gateway::GatewayState>().inner();
+        let (gw_port, gw_token) = crate::gateway::start_internal(&app, gw_state)?;
+        lifecycle.gateway_token = Some(gw_token);
+        format!("http://127.0.0.1:{gw_port}")
+    };
+    lifecycle.port = Some(port);
     lifecycle.child = Some(child);
     lifecycle.url = Some(url.clone());
     lifecycle.sidecar_url = Some(sidecar_url);
-    lifecycle.gateway_token = Some(gw_token);
     Ok(url)
 }
 

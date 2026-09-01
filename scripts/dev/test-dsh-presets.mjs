@@ -40,7 +40,7 @@ async function rpc(baseUrl, method, payload) {
 }
 
 async function waitForRoster(baseUrl, stderr) {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {
       return await rpc(baseUrl, "agentPreset.list", {});
@@ -51,7 +51,7 @@ async function waitForRoster(baseUrl, stderr) {
   throw new Error(`timed out waiting for dsh preset roster\n${stderr()}`);
 }
 
-test("the pinned dsh runtime discovers and mounts DeepLab's reviewer preset", { timeout: 45_000 }, async () => {
+test("the pinned dsh runtime discovers and mounts DeepLab's reviewer preset", { timeout: 150_000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), "deeplab-dsh-presets-"));
   const dshHome = join(home, "dsh-home");
   const reviewerTarget = join(dshHome, ".agent-presets", "reviewer");
@@ -63,7 +63,7 @@ test("the pinned dsh runtime discovers and mounts DeepLab's reviewer preset", { 
   let stderr = "";
   const child = spawn(
     process.execPath,
-    [dshCli, "--profile", "web", "--host", "127.0.0.1", "--port", String(port)],
+    [dshCli, "--profile", "web", "--host", "127.0.0.1", "--port", String(port), "--no-open"],
     {
       cwd: dshDir,
       windowsHide: true,

@@ -15,6 +15,10 @@ case "$TRIPLE" in
   aarch64-apple-darwin | x86_64-apple-darwin) ASSET="uv-$TRIPLE.tar.gz" ;;
   x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu) ASSET="uv-$TRIPLE.tar.gz" ;;
   x86_64-pc-windows-msvc | aarch64-pc-windows-msvc) ASSET="uv-$TRIPLE.zip" ;;
+  # uv publishes Windows binaries under MSVC triples, but the executable is
+  # also usable by a GNU-targeted Tauri app. Keep the output name on the
+  # requested triple because Tauri resolves externalBin by build target.
+  x86_64-pc-windows-gnu) ASSET="uv-x86_64-pc-windows-msvc.zip" ;;
   *) echo "Unsupported triple: $TRIPLE" >&2; exit 1 ;;
 esac
 

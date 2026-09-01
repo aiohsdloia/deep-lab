@@ -16,7 +16,8 @@ TRIPLE="${1:-$(rustc -Vv | sed -n 's/host: //p')}"
 case "$TRIPLE" in
   aarch64-apple-darwin)         ASSET="agent-browser-darwin-arm64" ;;
   x86_64-apple-darwin)          ASSET="agent-browser-darwin-x64" ;;
-  x86_64-pc-windows-msvc)       ASSET="agent-browser-win32-x64.exe" ;;
+  x86_64-pc-windows-msvc | x86_64-pc-windows-gnu)
+                                  ASSET="agent-browser-win32-x64.exe" ;;
   x86_64-unknown-linux-gnu)     ASSET="agent-browser-linux-x64" ;;
   aarch64-unknown-linux-gnu)    ASSET="agent-browser-linux-arm64" ;;
   *) echo "Unsupported triple for agent-browser: $TRIPLE" >&2; exit 1 ;;

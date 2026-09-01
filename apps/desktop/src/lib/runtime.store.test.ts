@@ -1927,10 +1927,24 @@ describe("approval mode", () => {
     }
   });
 
-  it("an error during the hold surfaces immediately", () => {
+  it("an error during the hold surfaces immediately", async () => {
     mocks.fireStatus("connecting");
     mocks.fireStatus("error");
     expect(useRuntimeStore.getState().status).toBe("error");
+    await useRuntimeStore.getState().connectRetry(1);
+  });
+
+  it("revives an exited desktop sidecar before reconnecting", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.startRuntime.mockClear();
+      mocks.fireStatus("error");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(mocks.startRuntime).toHaveBeenCalledTimes(1);
+      expect(useRuntimeStore.getState().status).toBe("ready");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("loadCatalog never clobbers defaultModel while a switch is in flight", async () => {

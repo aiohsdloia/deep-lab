@@ -696,9 +696,22 @@ function autoReconnectAfterDisconnect(get: StoreGet) {
   autoReconnectTimer = setTimeout(() => {
     autoReconnectTimer = null;
     if (get().status === "error") {
-      void get().connectRetry().then((ok) => {
+      void (async () => {
+        // Reopening an event stream is enough for a transient disconnect, but
+        // not when the desktop sidecar process itself exited. startRuntime is
+        // idempotent while healthy and respawns an exited child when needed.
+        if (isTauri) {
+          try {
+            await startRuntime();
+          } catch (err) {
+            void logDebug(
+              `runtime revive failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        const ok = await get().connectRetry();
         if (ok) autoReconnectAttempts = 0;
-      });
+      })();
     }
   }, delay);
 }
