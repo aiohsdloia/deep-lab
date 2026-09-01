@@ -45,5 +45,11 @@ describe("pinned DeepSeek Harness version", () => {
     });
     expect(upstream).toContain("4448c61db7d180c4c307aa3fa734db7c8507658d");
     expect(read("runtime/dsh-plugins/whale-widget/LICENSE")).toContain("MIT License");
+    expect(read("runtime/dsh-plugins/whale-widget/README.md")).toContain(
+      "DSH 小鲸鱼余额挂件",
+    );
+    expect(read("runtime/dsh-plugins/whale-widget/whale-widget-prompt.md")).toContain(
+      "小鲸鱼",
+    );
   });
 });

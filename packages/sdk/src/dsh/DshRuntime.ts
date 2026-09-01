@@ -955,16 +955,6 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     await this.settings.setProviderApiKey(providerID, key);
   }
 
-  /** Store an extension-owned secret in dsh's write-only credential service. */
-  async setCredential(ref: string, value: string): Promise<void> {
-    await this.settings.setCredential(ref, value);
-  }
-
-  /** Remove an extension-owned secret without exposing its previous value. */
-  async removeCredential(ref: string): Promise<void> {
-    await this.settings.removeCredential(ref);
-  }
-
   async getProviderRegion(_providerID: string): Promise<string | null> {
     return null;
   }

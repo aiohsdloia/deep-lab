@@ -6,7 +6,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
 use crate::runtime::{self, RuntimeState};
@@ -119,30 +118,6 @@ pub(crate) fn patch_entry(app: &AppHandle) -> Result<Option<Value>, String> {
     })))
 }
 
-fn request_json(state: &RuntimeState, path: &str, body: Option<&Value>) -> Result<Value, String> {
-    let base = runtime::sidecar_url(state).ok_or_else(|| "runtime not started".to_string())?;
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|error| error.to_string())?;
-    let request = match body {
-        Some(value) => client
-            .put(format!("{base}{path}"))
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_string(value).map_err(|error| error.to_string())?),
-        None => client.get(format!("{base}{path}")),
-    };
-    let response = request.send().map_err(|error| error.to_string())?;
-    let status = response.status();
-    let text = response.text().map_err(|error| error.to_string())?;
-    let payload: Value =
-        serde_json::from_str(&text).map_err(|error| format!("widget response parse: {error}"))?;
-    if !status.is_success() {
-        return Err(format!("widget endpoint returned HTTP {status}: {payload}"));
-    }
-    Ok(payload)
-}
-
 #[tauri::command]
 pub fn whale_widget_status(app: AppHandle) -> Result<WidgetStatus, String> {
     status(&app)
@@ -169,62 +144,6 @@ pub fn set_whale_widget_enabled(
     crate::dsh_mcp::refresh_patch(&app)?;
     runtime::restart_sidecar_if_running(&app, &state)?;
     Ok(())
-}
-
-#[tauri::command]
-pub fn whale_widget_balance(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-) -> Result<Value, String> {
-    if !enabled(&app)? {
-        return Err("whale widget is disabled".into());
-    }
-    request_json(&state, "/dsh-whale/balance.json", None)
-}
-
-#[tauri::command]
-pub fn whale_widget_last_turn(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-) -> Result<Value, String> {
-    if !enabled(&app)? {
-        return Err("whale widget is disabled".into());
-    }
-    request_json(&state, "/dsh-whale/last-turn.json", None)
-}
-
-#[tauri::command]
-pub fn whale_widget_config(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-) -> Result<Value, String> {
-    if !enabled(&app)? {
-        return Err("whale widget is disabled".into());
-    }
-    request_json(&state, "/dsh-whale/size.json", None)
-}
-
-#[tauri::command]
-pub fn set_whale_widget_usage_mode(
-    app: AppHandle,
-    state: State<'_, RuntimeState>,
-    mode: String,
-) -> Result<Value, String> {
-    if mode != "ledger" && mode != "token" {
-        return Err("usage mode must be ledger or token".into());
-    }
-    if !enabled(&app)? {
-        return Err("whale widget is disabled".into());
-    }
-    let mut config = request_json(&state, "/dsh-whale/size.json", None)?;
-    let object = config
-        .as_object_mut()
-        .ok_or_else(|| "widget config is not an object".to_string())?;
-    object
-        .entry("scale".to_string())
-        .or_insert_with(|| json!(1.5));
-    object.insert("usageMode".to_string(), Value::String(mode));
-    request_json(&state, "/dsh-whale/size.json", Some(&config))
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 // Thin bridge to the Tauri Rust side. In a plain browser these are no-ops so the
 // app still runs in `pnpm dev`; in the packaged desktop app they invoke Rust commands.
 
-import { isGatewayWeb, gatewayGet } from "./webMode";
+import { gatewayGet, gatewayOrigin, gatewayToken, isGatewayWeb } from "./webMode";
 import type { McpConfig, McpServer } from "@deeplab/sdk";
 
 export const isTauri =
@@ -294,32 +294,6 @@ export interface WhaleWidgetStatus {
 
 export const WHALE_WIDGET_CHANGED_EVENT = "deeplab:whale-widget-changed";
 
-export interface WhaleBalance {
-  ok: boolean;
-  code?: string;
-  error?: string;
-  stale?: boolean;
-  totalBalance?: number;
-  currency?: string;
-  todayUsage?: number;
-  usageMode?: "ledger" | "token";
-  isPeak?: boolean;
-  updatedAt?: string;
-}
-
-export interface WhaleLastTurn {
-  ok: boolean;
-  seq: number;
-  turn: number | null;
-  amount: number | null;
-  tokens: number | null;
-  ts: number | null;
-}
-
-export interface WhaleWidgetConfig {
-  usageMode?: "ledger" | "token";
-}
-
 export async function getWhaleWidgetStatus(): Promise<WhaleWidgetStatus> {
   if (isGatewayWeb) {
     return (
@@ -342,38 +316,22 @@ export async function setWhaleWidgetEnabled(enabled: boolean): Promise<void> {
   await invoke("set_whale_widget_enabled", { enabled });
 }
 
-export async function getWhaleBalance(): Promise<WhaleBalance> {
-  if (isGatewayWeb) {
-    const value = await gatewayGet<WhaleBalance>("/v1/whale/balance");
-    if (!value) throw new Error("whale balance is unavailable");
-    return value;
+export function adaptWhaleWidgetScript(source: string, runtimeBase: string): string {
+  if (!source.includes("window.__dshWhaleWidget")) {
+    throw new Error("the dsh whale plugin returned an unexpected client script");
   }
-  if (!isTauri) return { ok: false, code: "UNAVAILABLE" };
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<WhaleBalance>("whale_widget_balance");
+  return source.split("/dsh-whale/").join(`${runtimeBase}/`);
 }
 
-export async function getWhaleLastTurn(): Promise<WhaleLastTurn> {
-  if (isGatewayWeb) {
-    const value = await gatewayGet<WhaleLastTurn>("/v1/whale/last-turn");
-    if (!value) throw new Error("whale usage is unavailable");
-    return value;
-  }
-  if (!isTauri) return { ok: true, seq: 0, turn: null, amount: null, tokens: null, ts: null };
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<WhaleLastTurn>("whale_widget_last_turn");
-}
-
-export async function getWhaleWidgetConfig(): Promise<WhaleWidgetConfig> {
-  if (!isTauri) return {};
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<WhaleWidgetConfig>("whale_widget_config");
-}
-
-export async function setWhaleWidgetUsageMode(mode: "ledger" | "token"): Promise<void> {
-  if (!isTauri) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("set_whale_widget_usage_mode", { mode });
+/** Load the upstream plugin's complete browser client through the authenticated gateway. */
+export async function getWhaleWidgetScript(serverUrl: string): Promise<string> {
+  const token = isGatewayWeb ? gatewayToken() : await runtimePassword();
+  if (!token) throw new Error("the whale plugin gateway token is unavailable");
+  const gateway = (isGatewayWeb ? gatewayOrigin() : serverUrl).replace(/\/+$/, "");
+  const runtimeBase = `${gateway}/__deeplab/whale/${encodeURIComponent(token)}`;
+  const response = await fetch(`${runtimeBase}/widget.js`);
+  if (!response.ok) throw new Error(`whale plugin client returned HTTP ${response.status}`);
+  return adaptWhaleWidgetScript(await response.text(), runtimeBase);
 }
 
 export async function listDshMcpServers(): Promise<McpServer[]> {

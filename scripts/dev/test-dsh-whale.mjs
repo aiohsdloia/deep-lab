@@ -97,6 +97,19 @@ test("the pinned dsh runtime mounts the bundled whale balance and usage plugin",
     assert.equal(image.status, 200);
     assert.match(image.headers.get("content-type") ?? "", /^image\/png/);
     assert((await image.arrayBuffer()).byteLength > 100_000);
+
+    const client = await (await fetch(`${base}/dsh-whale/widget.js`)).text();
+    assert.match(client, /dshwv-menu/);
+    assert.match(client, /pointerdown/);
+    assert.match(client, /new Audio/);
+    assert.match(client, /LAST_TURN_URL/);
+    assert.match(client, /showBubble/);
+
+    for (const asset of ["rua.gif", "sound/press.mp3", "sound/release.mp3"]) {
+      const response = await fetch(`${base}/dsh-whale/${asset}`);
+      assert.equal(response.status, 200, asset);
+      assert((await response.arrayBuffer()).byteLength > 1_000, asset);
+    }
   } finally {
     child.kill();
     await new Promise((resolve) => child.once("exit", resolve));

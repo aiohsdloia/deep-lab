@@ -4,6 +4,6 @@ Version: 0.2.10
 Commit: 4448c61db7d180c4c307aa3fa734db7c8507658d
 License: MIT (see LICENSE)
 
-This directory is an unmodified vendored copy of the runtime package files
-needed by DeepLab. DeepLab mounts lib/index.js through an absolute Cordis entry
-only when the user enables the feature.
+This directory is an unmodified vendored copy of the complete upstream plugin
+package. DeepLab mounts lib/index.js through an absolute Cordis entry only when
+the user enables the feature, then hosts the upstream browser client as-is.

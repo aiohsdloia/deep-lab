@@ -300,9 +300,17 @@ fn route(stream: &mut TcpStream, req: &Request, ctx: &Ctx) {
     // gateway from a different origin than its own, so every cross-origin
     // fetch with an Authorization header needs a successful OPTIONS first.
     if req.method == "OPTIONS" {
-        let head = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: authorization, content-type\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Max-Age: 600\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        let head = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: authorization, content-type\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Max-Age: 600\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
         let _ = stream.write_all(head.as_bytes());
         let _ = stream.flush();
+        return;
+    }
+
+    // The upstream plugin's image and audio elements cannot attach an auth
+    // header. Give its unmodified client a token-scoped, strictly allowlisted
+    // path instead of exposing the dsh plugin endpoints directly.
+    if let Some(rest) = path.strip_prefix("/__deeplab/whale/") {
+        proxy_whale_runtime(stream, req, ctx, rest);
         return;
     }
 
@@ -480,22 +488,49 @@ fn v1(stream: &mut TcpStream, req: &Request, ctx: &Ctx, rest: &str) {
             ),
             Err(error) => respond_json(stream, 500, &err_json(&error)),
         },
-        ("GET", ["whale", "balance"]) => {
-            if crate::whale_widget::enabled(&ctx.app).unwrap_or(false) {
-                forward(stream, upstream_get(ctx, "/dsh-whale/balance.json", &[]));
-            } else {
-                respond_json(stream, 404, "{\"error\":\"whale widget is disabled\"}");
-            }
-        }
-        ("GET", ["whale", "last-turn"]) => {
-            if crate::whale_widget::enabled(&ctx.app).unwrap_or(false) {
-                forward(stream, upstream_get(ctx, "/dsh-whale/last-turn.json", &[]));
-            } else {
-                respond_json(stream, 404, "{\"error\":\"whale widget is disabled\"}");
-            }
-        }
         _ => respond_json(stream, 404, "{\"error\":\"not found\"}"),
     }
+}
+
+fn whale_runtime_allowed(method: &str, asset: &str) -> bool {
+    matches!(
+        (method, asset),
+        ("GET", "widget.js" | "image.png" | "rua.gif" | "balance.json" | "last-turn.json" | "size.json" | "sound/press.mp3" | "sound/release.mp3")
+            | ("PUT" | "POST", "size.json")
+    )
+}
+
+fn proxy_whale_runtime(stream: &mut TcpStream, req: &Request, ctx: &Ctx, rest: &str) {
+    let Some((provided_token, asset)) = rest.split_once('/') else {
+        return respond_json(stream, 404, "{\"error\":\"not found\"}");
+    };
+    if !ct_eq(provided_token, &ctx.token()) {
+        return respond_json(stream, 401, "{\"error\":\"unauthorized\"}");
+    }
+    if !crate::whale_widget::enabled(&ctx.app).unwrap_or(false) {
+        return respond_json(stream, 404, "{\"error\":\"whale widget is disabled\"}");
+    }
+    if ctx.read_only() && req.method != "GET" {
+        return respond_json(stream, 403, "{\"error\":\"token is read-only\"}");
+    }
+    if !whale_runtime_allowed(&req.method, asset) {
+        return respond_json(stream, 404, "{\"error\":\"not found\"}");
+    }
+    let Some(base) = endpoint(ctx) else {
+        return respond_json(stream, 503, "{\"error\":\"runtime not started\"}");
+    };
+    let query = if req.query.is_empty() { String::new() } else { format!("?{}", req.query) };
+    let method = match reqwest::Method::from_bytes(req.method.as_bytes()) {
+        Ok(method) => method,
+        Err(_) => return respond_json(stream, 400, "{\"error\":\"bad method\"}"),
+    };
+    let mut upstream = shared_client().request(method, format!("{base}/dsh-whale/{asset}{query}"));
+    if !req.body.is_empty() {
+        upstream = upstream
+            .header("Content-Type", req.header("content-type").unwrap_or("application/json"))
+            .body(req.body.clone());
+    }
+    forward(stream, upstream.send().map_err(|error| error.to_string()));
 }
 
 /// Serve the SPA shell (`index.html`) with a marker so it boots in web mode.
@@ -1015,7 +1050,7 @@ fn reason(status: u16) -> &'static str {
 
 fn respond(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u8]) {
     let head = format!(
-        "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: authorization, content-type\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: authorization, content-type\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         reason(status),
         body.len()
     );
@@ -1255,6 +1290,15 @@ mod tests {
         // SPA routes → extensionless, also not assets.
         assert!(!looks_static("/settings"));
         assert!(!looks_static("/live/ses_abc"));
+    }
+
+    #[test]
+    fn whale_runtime_is_an_exact_allowlist() {
+        assert!(whale_runtime_allowed("GET", "widget.js"));
+        assert!(whale_runtime_allowed("GET", "sound/press.mp3"));
+        assert!(whale_runtime_allowed("PUT", "size.json"));
+        assert!(!whale_runtime_allowed("POST", "balance.json"));
+        assert!(!whale_runtime_allowed("GET", "../api/session.list"));
     }
 
     #[test]
