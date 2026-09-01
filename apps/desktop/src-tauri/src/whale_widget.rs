@@ -150,6 +150,7 @@ pub async fn show_whale_widget_window(
     .parse()
     .map_err(|error| format!("invalid whale widget URL: {error}"))?;
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        let _ = window.remove_menu();
         window.navigate(url).map_err(|error| error.to_string())?;
         window.show().map_err(|error| error.to_string())?;
         return Ok(());
@@ -167,8 +168,13 @@ pub async fn show_whale_widget_window(
         .always_on_top(true)
         .visible_on_all_workspaces(true)
         .skip_taskbar(true)
+        .visible(false)
         .build()
         .map_err(|error| format!("could not create whale widget window: {error}"))?;
+
+    window
+        .remove_menu()
+        .map_err(|error| format!("could not remove whale widget menu: {error}"))?;
 
     if let Ok(Some(monitor)) = window.current_monitor() {
         let monitor_position = monitor.position();
@@ -179,6 +185,7 @@ pub async fn show_whale_widget_window(
         let y = monitor_position.y + monitor_size.height as i32 - physical_size - WINDOW_MARGIN;
         let _ = window.set_position(PhysicalPosition::new(x, y));
     }
+    window.show().map_err(|error| error.to_string())?;
     Ok(())
 }
 

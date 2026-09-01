@@ -3,7 +3,7 @@
 // free port*, with an *app-private* DSH_HOME, and is killed on app exit.
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
@@ -1139,7 +1139,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     // Node and resource paths before every boot. App upgrades may move either.
     let mcp_patch = crate::dsh_mcp::refresh_patch(app)?;
 
-    let mut builder = Command::new(node);
+    let mut builder = quiet_command(node);
     builder
         .arg(&cli)
         .args(["--profile", "web", "--patch"])
