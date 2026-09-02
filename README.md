@@ -67,6 +67,7 @@ in one continuous, auditable session.
 | Remote compute | Register machines from `~/.ssh/config`, probe them, submit/track/cancel jobs. |
 | Runs | Append-only run logs, global SQLite run index, search/facets/pagination. |
 | Provenance | `.deeplab/provenance.jsonl` tracks file versions and links artifacts to the run or edit that created them. |
+| Research workflows | A dsh-native `ai4s-agent` pipeline coordinates topic exploration, literature survey, experiment construction, and paper writing through dedicated subagents. |
 | Review | First-party scientific skills: traceability-review, stats-integrity, domain-check, large-file, publication-figures, remote-compute, modal-run, phylo-inference, image-tools. |
 | Viewers | PDF, image, video, HTML, Markdown, code, CSV/TSV with charts, DOCX, XLSX, PPTX, molecules, 3D meshes, genome tracks, FITS, bands, and more. |
 | Gateway | Token-authenticated gateway that serves the real UI to a CLI, a LAN browser, or a phone. |

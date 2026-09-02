@@ -152,6 +152,10 @@
       "title": "Run the BCI trends demo",
       "description": "Install the bundled BCI literature workspace and produce a traceable report."
     },
+    "research-pipeline": {
+      "title": "Start a research pipeline",
+      "description": "Explore a topic, survey the literature, run experiments, and assemble a traced paper."
+    },
     "build-bio-tool": {
       "title": "Build a bioinformatics tool",
       "description": "Build a small, self-contained bioinformatics software end to end in this workspace."

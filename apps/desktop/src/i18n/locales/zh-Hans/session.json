@@ -152,6 +152,10 @@
       "title": "运行 BCI 趋势演示",
       "description": "安装内置脑机接口文献工作区，并生成可追溯报告。"
     },
+    "research-pipeline": {
+      "title": "启动完整科研流程",
+      "description": "从方向探索、文献综述和实验执行，一直推进到可追溯论文。"
+    },
     "build-bio-tool": {
       "title": "构建一个生物信息软件",
       "description": "在本工作区中端到端地构建一个小型、自包含的生物信息学软件。"

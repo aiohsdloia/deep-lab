@@ -5,6 +5,7 @@ import {
   Dna,
   GitFork,
   Globe,
+  Microscope,
   Sparkles,
 } from "lucide-react";
 
@@ -38,6 +39,16 @@ export const WORKFLOW_STARTERS: WorkflowStarter[] = [
       "figures/year_trend.png for the user. " +
       "Do not access the network, invent papers, or create/edit anything under .deeplab; " +
       "DeepLab owns run history and provenance for the dsh tool events.",
+  },
+  {
+    id: "research-pipeline",
+    icon: <Microscope size={17} strokeWidth={1.75} />,
+    prompt:
+      "Use the bundled ai4s-agent skill to start an end-to-end research pipeline. " +
+      "First ask whether I have a broad direction or a specific topic, what constraints apply, " +
+      "and whether I have real measured results. Coordinate each stage with DeepSeek Harness " +
+      "subagents exactly as the skill specifies, inspect every required output before continuing, " +
+      "and keep all files inside this workspace. Never invent citations or measured results.",
   },
   {
     id: "build-bio-tool",
@@ -96,6 +107,10 @@ export function WorkflowStarters({
     "bci-trends": {
       title: t("starters.bci-trends.title"),
       description: t("starters.bci-trends.description"),
+    },
+    "research-pipeline": {
+      title: t("starters.research-pipeline.title"),
+      description: t("starters.research-pipeline.description"),
     },
     "build-bio-tool": {
       title: t("starters.build-bio-tool.title"),
