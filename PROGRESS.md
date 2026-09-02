@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-09-02 15:34` — Added a verified project handoff report that classifies DeepLab 1.0.2 as a working dsh-native Windows beta rather than complete OpenLab parity, records the installed paths and acceptance evidence, and prioritizes reproducible packaging, installed-app E2E coverage, parity closure, and laboratory-endpoint validation for the receiving agent.
 - `2026-09-02 15:15` — Built and deployed the research-pipeline desktop update to the real Windows installation; a fresh app-managed dsh process attached an existing session, discovered all five new skills in its 22-skill catalog, and exposed the deployed `/research` command from the corrected desktop shortcut.
 - `2026-09-02 12:15` — Restored OpenLab's five-stage research pipeline as bundled dsh-native skills with dependency-aware subagent orchestration, a `/research` command, and a visible workflow starter; real pinned-dsh discovery, focused UI tests, typecheck, lint, the full 910-test suite, and the production web build pass.
 - `2026-09-02 00:00` — Expanded the unchanged upstream whale's desktop host to the active display work area and added host-only pointer routing; installed Windows acceptance dragged it top-right to bottom-left and back, confirmed transparent-area hit-through with no native menu or dsh console, and passed pinned-dsh plugin acceptance, while Rust test executables remain blocked by this host's GNU/WebView `STATUS_ENTRYPOINT_NOT_FOUND` runtime mismatch.
