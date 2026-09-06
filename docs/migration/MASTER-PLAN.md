@@ -30,9 +30,9 @@
 - [x] M1 结论:全局 memory 唯一文件 = `dsh-home/MEMORY.md`(UI 读写/instructions 注入/种子同一绝对路径;`/profile/MEMORY.md` 仅测试示例),项目=工作区 `AGENTS.md` → 每层单写入方,无第二源
 - [x] T1 remote-runs 合并:改好的 `record_run.py` 已真实写入 `.deeplab/remote-runs.jsonl`,Rust `read_runs` 合并两文件(真 SSH 运行仍属环境门控)
 
-### B3 科研资产链(进行中:审计完成)
+### B3 科研资产链(usage 聚合完成)
 - [x] 就绪度审计:`docs/migration/B3-ASSETS-AUDIT.md`(usage 缺通用聚合;notebook 环境门控;reviewer/domain-check 已可用)
-- [~] usage 通用聚合:核心 `lib/usage.ts` + SDK `usage.updated` 上浮完成(13 tests);剩 store 累加 + 每会话 UI 展示
+- [x] usage 通用聚合:`lib/usage.ts` 核心 + SDK `usage.updated` 上浮 + store 累加 + Composer UsagePill(全量 918 通过)
 - [ ] notebook 真 kernel 闭环(实证,环境)
 - [ ] reviewer↔artifact 关联演示
 
@@ -40,12 +40,14 @@
 - [ ] MCP / Jupyter / browser connector 实环境闭环
 - [ ] remote compute(SSH / Slurm / Modal)实环境闭环
 - [ ] legacy `.openlab` 导入兼容(新写一律 `.deeplab`)
+- [ ] note:compute.json 仍全链 `.openlab`(刻意兼容,迁移时机另定;`record_run.py` 已迁 `.deeplab`)
 
-### B5 外围与清理
+### B5 外围与清理(部分)
+- [x] 可见品牌残留:webview title / model-probe UA / gateway health tag → DeepLab(2026-09-06)
 - [ ] gateway 手机端回归
 - [ ] i18n:新功能无硬编码用户文本
 - [ ] 技能管理 UI;实验室 OpenAI-compatible provider 端到端(model-agnostic)
-- [ ] 品牌/死代码/ACP 残留清理(兼容路径除外)
+- [ ] 品牌/死代码/ACP 残留清理(兼容路径除外,持续)
 
 ### B6 发布成熟
 - [ ] 打包可复现(自动化 NSIS/短路径,无手工 subst)
