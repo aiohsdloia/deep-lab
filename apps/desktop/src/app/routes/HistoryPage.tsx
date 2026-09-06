@@ -26,6 +26,7 @@ import { isTauri, pickFolder, writeExportFile } from "@/lib/tauri";
 import { toast } from "@/lib/toast";
 import { ClosePageButton } from "@/components/ui/ClosePageButton";
 import { pathKey, samePath } from "@/lib/workspacePath";
+import { aggregateLabel, loadAggregate, totalTokens } from "@/lib/usage";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /** Rows fetched per request. The server answers a 200-row page in ~10 ms at
@@ -217,6 +218,16 @@ export function HistoryPage() {
   const canWrite = !webReadOnly;
   const empty = !loading && rows.length === 0;
 
+  const usageLine = (() => {
+    try {
+      if (typeof localStorage === "undefined") return null;
+      const agg = loadAggregate(localStorage);
+      return totalTokens(agg.totals) > 0 ? aggregateLabel(agg) : null;
+    } catch {
+      return null;
+    }
+  })();
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8">
@@ -245,6 +256,10 @@ export function HistoryPage() {
             </button>
           )}
         </div>
+
+        {usageLine !== null && (
+          <p className="mt-2 text-xs text-muted">{usageLine}</p>
+        )}
 
         <div className="relative mt-5">
           <Search
