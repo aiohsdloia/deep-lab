@@ -27,6 +27,7 @@ export function SkillsPage() {
   const connected = status === "ready";
   const [text, setText] = useState("");
   const [installing, setInstalling] = useState(false);
+  const [skillFilter, setSkillFilter] = useState("");
 
   useEffect(() => {
     if (connected) void loadCatalog();
@@ -120,18 +121,35 @@ export function SkillsPage() {
             </Section>
             <Section title={t("skills.skillsListSection.sectionTitle", { count: skills.length })} icon={<Puzzle size={15} />}>
               {skills.length === 0 && <Empty>{t("skills.skillsListSection.empty")}</Empty>}
-              {skills.map((s) => {
-                const source = sourceOf(s.location);
-                const sourceLabel =
-                  source === "builtin"
-                    ? t("skills.skillsListSection.source.builtin")
-                    : source === "project"
-                      ? t("skills.skillsListSection.source.project")
-                      : source === "user"
-                        ? t("skills.skillsListSection.source.user")
-                        : undefined;
-                return <RowItem key={s.name} name={s.name} desc={s.description} tag={sourceLabel} />;
-              })}
+              {skills.length > 0 && (
+                <div className="px-4 py-3">
+                  <input
+                    value={skillFilter}
+                    onChange={(e) => setSkillFilter(e.target.value)}
+                    placeholder={t("skills.skillsListSection.filterPlaceholder")}
+                    className="w-full rounded-input border border-border bg-surface px-3 py-1.5 text-sm text-text outline-none placeholder:text-muted"
+                  />
+                </div>
+              )}
+              {(() => {
+                const q = skillFilter.trim().toLowerCase();
+                const visible = q
+                  ? skills.filter((s) => `${s.name} ${s.description ?? ""}`.toLowerCase().includes(q))
+                  : skills;
+                if (visible.length === 0) return <Empty>{t("skills.skillsListSection.noMatch", { q: skillFilter.trim() })}</Empty>;
+                return visible.map((s) => {
+                  const source = sourceOf(s.location);
+                  const sourceLabel =
+                    source === "builtin"
+                      ? t("skills.skillsListSection.source.builtin")
+                      : source === "project"
+                        ? t("skills.skillsListSection.source.project")
+                        : source === "user"
+                          ? t("skills.skillsListSection.source.user")
+                          : undefined;
+                  return <RowItem key={s.name} name={s.name} desc={s.description} tag={sourceLabel} />;
+                });
+              })()}
             </Section>
           </>
         ) : (

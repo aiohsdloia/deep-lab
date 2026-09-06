@@ -90,6 +90,8 @@
     "skillsListSection": {
       "sectionTitle": "Skills ({{count}})",
       "empty": "No skills loaded yet.",
+      "filterPlaceholder": "Filter skills by name or description",
+      "noMatch": "No skills match \"{{q}}\".",
       "source": {
         "builtin": "built-in",
         "project": "project",
