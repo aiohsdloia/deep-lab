@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-09-06 22:06` - B3 usage verified in-app: the composer UsagePill rendered for a real session, and recorded runs now carry sane wall-times (667ms/587ms - the SDK epoch-ms fix holds), with empty outputs correctly empty for print-only commands.
 - `2026-09-06 21:58` - B5 cleanup: removed the 26 tracked empty `.gitkeep` placeholders under `apps/desktop/src` (feature dirs, placeholder components, empty lib layers) that made the tree look half-finished; the dirs stay on disk, git no longer tracks the void.
 - `2026-09-06 21:45` - B5 cleanup: visible Open Lab branding left in the webview title, the model-probe user agent, and the gateway health tag is now DeepLab / deeplab-gateway (internal legacy comments kept for import compatibility).
 - `2026-09-06 21:36` - B3 usage wiring part 1: SDK now surfaces per-message token usage (`assistant/message` carries dsh usage in real transcripts - verified) as a normalized `usage.updated` event (new RuntimeEvent member), backed by `lib/usage.ts` (parse/accumulate/DeepSeek-CNY pricing with honest 0 for local-lab-unknown); fold+usage tests 13/13 and typecheck green. Store accumulation + per-session UI pill is the remaining wiring slice.
