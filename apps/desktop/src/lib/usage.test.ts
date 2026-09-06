@@ -1,12 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
   accumulateUsage,
+  addUsageToAggregate,
+  aggregateLabel,
   EMPTY_TOTALS,
   estimateCostCny,
+  loadAggregate,
+  resetAggregate,
   totalTokens,
   usageLabel,
   usageSampleFromPayload,
 } from "./usage";
+
+function fakeStorage(): Storage & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (k: string) => store.get(k) ?? null,
+    key: (i: number) => [...store.keys()][i] ?? null,
+    removeItem: (k: string) => void store.delete(k),
+    setItem: (k: string, v: string) => void store.set(k, v),
+  } as unknown as Storage & { store: Map<string, string> };
+}
 
 describe("usageSampleFromPayload", () => {
   it("parses dsh-style assistant usage numbers", () => {
@@ -54,5 +73,25 @@ describe("usageLabel", () => {
     expect(usageLabel(totals, "lab-server") ?? "").toMatch(/tok$/);
     expect(usageLabel(totals, null) ?? "").toMatch(/tok$/);
     expect(usageLabel(EMPTY_TOTALS, "deepseek-v4-flash")).toBeNull();
+  });
+});
+
+describe("durable usage aggregate", () => {
+  it("accumulates across samples and survives a reload (fake storage)", () => {
+    const storage = fakeStorage();
+    expect(loadAggregate(storage).costCny).toBe(0);
+    addUsageToAggregate(storage, "deepseek-v4-flash", {
+      inputTokens: 1_000_000,
+      cacheReadTokens: 1_000_000,
+      outputTokens: 1_000_000,
+    });
+    const reloaded = loadAggregate(storage);
+    expect(totalTokens(reloaded.totals)).toBe(3_000_000);
+    expect(reloaded.costCny).toBeCloseTo(5, 6);
+    expect(aggregateLabel(reloaded)).toMatch(/3\.00M tok · ≈¥5\.00/);
+    addUsageToAggregate(storage, "lab-model", { outputTokens: 500 });
+    expect(totalTokens(loadAggregate(storage).totals)).toBe(3_000_500);
+    resetAggregate(storage);
+    expect(loadAggregate(storage).totals.outputTokens).toBe(0);
   });
 });

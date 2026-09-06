@@ -74,8 +74,68 @@ export function usageLabel(totals: UsageTotals, model: string | null | undefined
   return cost && cost > 0 ? `${num} tok · ≈¥${cost.toFixed(2)}` : `${num} tok`;
 }
 
-/** Providers whose cost the app cannot price (local/lab/unknown) are honest
- *  zero/unknown rather than guessed. */
+export const USAGE_AGGREGATE_KEY = "deeplab:usage:aggregate";
+
+export interface UsageAggregate {
+  totals: UsageTotals;
+  costCny: number;
+}
+
+export function emptyAggregate(): UsageAggregate {
+  return { totals: { ...EMPTY_TOTALS }, costCny: 0 };
+}
+
+export function loadAggregate(storage: Pick<Storage, "getItem">): UsageAggregate {
+  try {
+    const raw = storage.getItem(USAGE_AGGREGATE_KEY);
+    if (!raw) return emptyAggregate();
+    const parsed = JSON.parse(raw) as Partial<UsageAggregate>;
+    const t = (parsed.totals ?? {}) as Partial<UsageTotals>;
+    return {
+      totals: {
+        inputTokens: num(t.inputTokens) ?? 0,
+        cacheReadTokens: num(t.cacheReadTokens) ?? 0,
+        outputTokens: num(t.outputTokens) ?? 0,
+        reasoningTokens: num(t.reasoningTokens) ?? 0,
+      },
+      costCny: typeof parsed.costCny === "number" && Number.isFinite(parsed.costCny) ? parsed.costCny : 0,
+    };
+  } catch {
+    return emptyAggregate();
+  }
+}
+
+/** Add one live usage sample to the durable aggregate (model string decides
+ *  whether cost is estimated; local/lab/unknown stay at 0). */
+export function addUsageToAggregate(
+  storage: Pick<Storage, "getItem" | "setItem">,
+  model: string | null,
+  sample: UsageSample,
+): UsageAggregate {
+  const prev = loadAggregate(storage);
+  const cost = estimateCostCny(providerOfModel(model), model, sample);
+  const next: UsageAggregate = {
+    totals: accumulateUsage(prev.totals, sample),
+    costCny: prev.costCny + (cost ?? 0),
+  };
+  storage.setItem(USAGE_AGGREGATE_KEY, JSON.stringify(next));
+  return next;
+}
+
+export function resetAggregate(storage: Pick<Storage, "removeItem">): void {
+  storage.removeItem(USAGE_AGGREGATE_KEY);
+}
+
+function providerOfModel(model: string | null | undefined): string | null {
+  return model != null && /deepseek/i.test(model) ? "deepseek-official" : null;
+}
+
+/** Compact one-line readout for an aggregate, e.g. "1.2M tok · ≈¥8.50". */
+export function aggregateLabel(a: UsageAggregate): string {
+  const n = totalTokens(a.totals);
+  const num = n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+  return a.costCny > 0 ? `${num} tok · ≈¥${a.costCny.toFixed(2)}` : `${num} tok`;
+}
 export function estimateCostCny(
   provider: string | null,
   _model: string | null,

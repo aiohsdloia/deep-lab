@@ -67,7 +67,12 @@ import { provenanceInputsFromEvent, recordProvenance } from "./provenance";
 import { clearResolvedPaths } from "./artifactFile";
 import { imageAttachmentParts } from "./promptAttachments";
 import { recordRun, runInputFromEvent } from "./runs";
-import { accumulateUsage, EMPTY_TOTALS, type UsageTotals } from "./usage";
+import {
+  accumulateUsage,
+  addUsageToAggregate,
+  EMPTY_TOTALS,
+  type UsageTotals,
+} from "./usage";
 import { splitReview } from "./review";
 import { useSshStore } from "./ssh";
 import {
@@ -2497,6 +2502,17 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
               [sid]: accumulateUsage(state.usageBySession[sid] ?? EMPTY_TOTALS, event.usage),
             },
           }));
+          const model =
+            get().sessionModels[sid] ??
+            get().defaultModel ??
+            null;
+          try {
+            if (typeof localStorage !== "undefined") {
+              addUsageToAggregate(localStorage, model, event.usage);
+            }
+          } catch {
+            // storage unavailable (webview privacy mode etc.) — best-effort
+          }
         }
         return;
       }
