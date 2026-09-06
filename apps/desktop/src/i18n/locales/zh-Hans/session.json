@@ -426,5 +426,8 @@
     "open": "查看本会话中提出的问题",
     "searchPlaceholder": "搜索问题…",
     "empty": "暂无问题"
+  },
+  "usage": {
+    "pillTitle": "本会话 token 用量与估算费用（实时）"
   }
 }

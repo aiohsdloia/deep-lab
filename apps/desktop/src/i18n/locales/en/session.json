@@ -435,5 +435,8 @@
     "open": "View the questions asked in this session",
     "searchPlaceholder": "Search questions…",
     "empty": "No questions yet"
+  },
+  "usage": {
+    "pillTitle": "This session's token usage and estimated cost (live)"
   }
 }
