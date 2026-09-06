@@ -21,7 +21,7 @@
 ### 代码/打磨类(可独立做)
 - [ ] usage 跨会话/按 provider-model 聚合视图
 - [ ] NSIS 安装包:修剪/短路径方案(P0 已试:makensis MAX_PATH 卡深路径)
-- [ ] 会话 restore/export 语义显式化(不假装)
+- [x] 会话 restore/export 语义显式化(`docs/migration/SESSION-SEMANTICS.md`:archive≈删除、可重新 attach、revert→fork、队列=本地草稿、无 jobs/plan 伪造)
 - [ ] 全量回归在每次发版前过一遍
 
 ## 板块与勾选
