@@ -50,8 +50,9 @@
 - [ ] 技能管理 UI;实验室 OpenAI-compatible provider 端到端(model-agnostic)
 - [ ] 品牌/死代码/ACP 残留清理(兼容路径除外,持续)
 
-### B6 发布成熟
-- [ ] 打包可复现(自动化 NSIS/短路径,无手工 subst)
+### B6 发布成熟(部分:可移植发布目录)
+- [x] 可复现 staging:`scripts/release/stage-windows-release.ps1` 产出 `dist/DeepLab-windows-x64`(exe+资源同构,dsh 完整性+manifest+SHA256)
+- [ ] NSIS 全自动安装包:makensis MAX_PATH 卡在 ~460 字符的 vendored 深路径(如 @aws-sdk/smithy .d.ts),需先修剪 dsh 包内非运行时文件(打磨期)
 - [ ] 干净机全自动安装验收脚本
 - [ ] macOS / Linux 装后验收;CI 骨架
 - [ ] 凭据轮换与安全检查(历史暴露 key)

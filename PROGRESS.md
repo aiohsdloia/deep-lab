@@ -3,6 +3,7 @@
 One line per real milestone, `YYYY-MM-DD HH:MM` + a one-sentence conclusion, newest on top.
 Results and blockers only.
 
+- `2026-09-06 23:02` - Initial-version deliverable: added `scripts/release/stage-windows-release.ps1` which reproduces the runnable Windows release folder `dist/DeepLab-windows-x64` (exe + resources layout-identical to the install, dsh integrity check, manifest + exe SHA256; 54,973 files staged). Full NSIS bundling stays blocked by makensis MAX_PATH on ~460-char vendored deep paths (e.g. @aws-sdk/smithy `.d.ts`); pruning non-runtime files out of the bundled dsh is the planned fix.
 - `2026-09-06 22:06` - B3 usage verified in-app: the composer UsagePill rendered for a real session, and recorded runs now carry sane wall-times (667ms/587ms - the SDK epoch-ms fix holds), with empty outputs correctly empty for print-only commands.
 - `2026-09-06 21:58` - B5 cleanup: removed the 26 tracked empty `.gitkeep` placeholders under `apps/desktop/src` (feature dirs, placeholder components, empty lib layers) that made the tree look half-finished; the dirs stay on disk, git no longer tracks the void.
 - `2026-09-06 21:45` - B5 cleanup: visible Open Lab branding left in the webview title, the model-probe user agent, and the gateway health tag is now DeepLab / deeplab-gateway (internal legacy comments kept for import compatibility).
