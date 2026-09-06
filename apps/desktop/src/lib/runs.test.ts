@@ -157,6 +157,13 @@ describe("runInputFromEvent", () => {
     });
   });
 
+  it("treats every shell-tool name as a run candidate (dsh reports pwsh on Windows)", () => {
+    const baseline = runInputFromEvent(bash());
+    for (const tool of ["bash", "pwsh", "sh", "cmd", "powershell", "BASH"]) {
+      expect(runInputFromEvent(bash({ tool }))).toEqual(baseline);
+    }
+  });
+
   it("skips remote submissions — the remote-compute/modal-run skills record those with real remote facts", () => {
     // The local passive capture can't see remote env/hardware/outputs, so it
     // stays out of the way rather than stamping the laptop's environment.
@@ -180,7 +187,7 @@ describe("runInputFromEvent", () => {
     expect(r?.surface).toBe("local");
   });
 
-  it("ignores non-bash, non-terminal, pathless, and non-execution commands", () => {
+  it("ignores non-shell, non-terminal, pathless, and non-execution commands", () => {
     expect(runInputFromEvent(bash({ tool: "write" }))).toBeNull();
     expect(runInputFromEvent(bash({ status: "running" }))).toBeNull();
     expect(runInputFromEvent(bash({ status: "pending" }))).toBeNull();

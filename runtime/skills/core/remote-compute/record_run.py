@@ -2,17 +2,17 @@
 """Record a remote (SSH/HPC/Modal) experiment run into the Open Science provenance.
 
 Remote runs execute off the laptop, so the app can't capture their environment,
-hardware, or outputs. This helper — called by the remote-compute / modal-run skills
-AFTER a job completes and its results are fetched — appends an accurate run
-record to <workspace>/.openlab/remote-runs.jsonl, which the app merges into
+hardware, or outputs. This helper 鈥?called by the remote-compute / modal-run skills
+AFTER a job completes and its results are fetched 鈥?appends an accurate run
+record to <workspace>/.deeplab/remote-runs.jsonl, which the app merges into
 the Runs view. It owns the record schema so the agent never hand-writes JSON.
 
 Record EVERYTHING the run touched, not a sample: pass every script that ran as a
 repeated --code, every fetched output as a repeated --output. On a plain SSH box
 the software environment is ambient (whatever happens to be installed), not
-declared, so it is lost unless captured on the box at run time — pass the fetched
+declared, so it is lost unless captured on the box at run time 鈥?pass the fetched
 manifest as --env-file to pin the interpreter + package versions. (Modal/Slurm
-runs declare their environment in the versioned spec — the Image/module lines —
+runs declare their environment in the versioned spec 鈥?the Image/module lines 鈥?
 so they need no --env-file.)
 
 Usage (run from the workspace root):
@@ -31,8 +31,8 @@ import os
 import sys
 import time
 
-STORE = os.path.join(".openlab", "remote-runs.jsonl")
-ENV_DIR = os.path.join(".openlab", "env")  # package lockfiles, content-addressed
+STORE = os.path.join(".deeplab", "remote-runs.jsonl")
+ENV_DIR = os.path.join(".deeplab", "env")  # package lockfiles, content-addressed
 HASH_CAP = 5_000_000  # bytes; larger files are recorded by size only
 FREEZE_MARKER = "--- pip freeze ---"
 
@@ -41,7 +41,7 @@ def artifact(path, missing):
     """A {path, hash?, size} record for a workspace file (size 0 if missing).
 
     A path that resolves to size 0 is appended to `missing` so the caller can
-    warn — a recorded-but-absent file usually means the fetch step was skipped.
+    warn 鈥?a recorded-but-absent file usually means the fetch step was skipped.
     """
     rec = {"path": path.replace(os.sep, "/")}
     try:
@@ -69,7 +69,7 @@ def read_env(path):
         numpy==2.4.4
         scipy==1.17.1
     The full freeze is stored as a content-addressed lockfile under
-    .openlab/env/<hash>.txt (mirroring how the app records local runs), and
+    .deeplab/env/<hash>.txt (mirroring how the app records local runs), and
     `packages` points at it. Returns None if the file is missing/empty.
     """
     try:
@@ -165,16 +165,16 @@ def main():
                    "'24 CPU cores, 62 GB (CPU-only)'. State what ran, not what the box has.")
     p.add_argument("--wall-ms", dest="wall_ms", type=int, help="wall-clock duration in milliseconds")
     p.add_argument("--code", action="append", default=[],
-                   help="a script that ran — pass one per script (entry AND its helpers), repeatable")
+                   help="a script that ran 鈥?pass one per script (entry AND its helpers), repeatable")
     p.add_argument("--output", action="append", default=[],
-                   help="a fetched output file — pass one per file, repeatable")
+                   help="a fetched output file 鈥?pass one per file, repeatable")
     p.add_argument("--env-file", dest="env_file",
                    help="fetched remote env manifest (SSH runs); pins interpreter + packages")
     p.add_argument("--session-id", dest="session_id", help="originating conversation id")
     args = p.parse_args()
 
-    # The skill passes `--session-id "$(cat .openlab/session.txt)"`, which is
-    # empty when the marker is absent — treat that as "no session".
+    # The skill passes `--session-id "$(cat .deeplab/session.txt)"`, which is
+    # empty when the marker is absent 鈥?treat that as "no session".
     if args.session_id is not None and not args.session_id.strip():
         args.session_id = None
 
@@ -211,13 +211,13 @@ def main():
     reject_reused_output_paths(record)
     with open(STORE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
-    print(f"Recorded {args.surface} run {run_id} ({args.status}) → {STORE}", file=sys.stderr)
+    print(f"Recorded {args.surface} run {run_id} ({args.status}) 鈫?{STORE}", file=sys.stderr)
     if not args.code:
-        print("warning: no --code recorded — the run's code is not pinned.", file=sys.stderr)
+        print("warning: no --code recorded 鈥?the run's code is not pinned.", file=sys.stderr)
     if not args.output:
-        print("warning: no --output recorded — the run produced no traceable artifacts.", file=sys.stderr)
+        print("warning: no --output recorded 鈥?the run produced no traceable artifacts.", file=sys.stderr)
     for m in missing:
-        print(f"warning: {m} not found (recorded as size 0) — was it fetched back?", file=sys.stderr)
+        print(f"warning: {m} not found (recorded as size 0) 鈥?was it fetched back?", file=sys.stderr)
 
 
 if __name__ == "__main__":

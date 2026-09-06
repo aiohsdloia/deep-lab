@@ -79,9 +79,23 @@ describe("DshRuntime chunk folding partIds", () => {
 
   it("surfaces nested tool output from dsh's tool/result event", () => {
     const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
-    const seen: Array<{ callId: string; output?: string }> = [];
+    const seen: Array<{
+      callId: string;
+      tool?: string;
+      status?: string;
+      input?: { command?: string };
+      output?: string;
+    }> = [];
     rt.onEvent((e: RuntimeEvent) => {
-      if (e.type === "tool.updated") seen.push({ callId: e.callId, output: e.output });
+      if (e.type === "tool.updated") {
+        seen.push({
+          callId: e.callId,
+          tool: e.tool,
+          status: e.status,
+          input: e.input as { command?: string } | undefined,
+          output: e.output,
+        });
+      }
     });
     const fold = (e: unknown) =>
       (rt as unknown as { foldSessionEvent: (sid: string, e: unknown) => void }).foldSessionEvent("s1", e);
@@ -113,6 +127,37 @@ describe("DshRuntime chunk folding partIds", () => {
     expect(result).toBeDefined();
     expect(result!.callId).toBe("call_1");
     expect(result!.output).toBe("hi\n");
+    // The completion event must keep the start facts (name, input, startedAt);
+    // the passive run recorder reads command from the completion's input, and
+    // dsh's tool/result frame echoes none of them.
+    expect(result!.tool).toBe("bash");
+    expect(result!.status).toBe("success");
+    expect(result!.input?.command).toBe("echo hi");
+  });
+
+  it("keeps dsh's epoch-millisecond timestamps on tool events (no *1000 inflation)", () => {
+    const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+    const seen: Array<{ startedAt?: number; endedAt?: number }> = [];
+    rt.onEvent((e: RuntimeEvent) => {
+      if (e.type === "tool.updated") seen.push({ startedAt: e.startedAt, endedAt: e.endedAt });
+    });
+    const fold = (e: unknown) =>
+      (rt as unknown as { foldSessionEvent: (sid: string, e: unknown) => void }).foldSessionEvent("s1", e);
+    fold({
+      type: "tool/call",
+      time: 1_700_000_000_000,
+      data: { callId: "call_t", name: "pwsh", arguments: '{"command":"python x.py"}' },
+    });
+    fold({
+      type: "tool/result",
+      time: 1_700_000_001_000,
+      data: { message: { source: { kind: "tool", callId: "call_t" }, isError: false } },
+    });
+    const running = seen.find((s) => s.startedAt !== undefined && s.endedAt === undefined);
+    const done = seen.find((s) => s.endedAt !== undefined);
+    expect(running?.startedAt).toBe(1_700_000_000_000);
+    expect(done?.startedAt).toBe(1_700_000_000_000);
+    expect(done?.endedAt).toBe(1_700_000_001_000);
   });
 });
 

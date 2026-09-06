@@ -1081,6 +1081,62 @@ where
     });
 }
 
+/// Sentinel modules whose absence makes the bundled dsh fail deep inside the
+/// Cordis loader with a stack trace, long after the window is already open.
+/// These paths were the exact modules missing in the 2026-09-02 half-copied
+/// Windows bundle (the whale host opened blank; the sidecar only then crashed
+/// with `Cannot find module './detect-resources'` / `Cannot find the native
+/// Koffi module`). Checking them before spawning turns that into one clear error.
+fn verify_dsh_bundle(dsh_dir: &Path) -> Result<(), String> {
+    let canaries = [
+        "node_modules/@deepseek-ai/dsh/lib/bin.js",
+        "node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-base/node_modules/@deepseek-ai/dsh-session-telemetry-otel/node_modules/@opentelemetry/sdk-logs/node_modules/@opentelemetry/resources/build/src/detect-resources.js",
+        "node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-base/node_modules/@deepseek-ai/dsh-session-telemetry-otel/node_modules/@opentelemetry/resources/build/src/detect-resources.js",
+    ];
+    let mut missing: Vec<&str> = Vec::new();
+    for rel in canaries {
+        if !dsh_dir.join(rel).is_file() {
+            missing.push(rel.rsplit('/').next().unwrap_or(rel));
+        }
+    }
+    if cfg!(windows) {
+        let koffi = dsh_dir.join(
+            "node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-base/node_modules/@deepseek-ai/dsh-sandbox-local/node_modules/@deepseek-ai/dsh-sandbox-windows-acl/node_modules/koffi",
+        );
+        if !has_file_under(&koffi, "koffi.node") {
+            missing.push("a native koffi binding under dsh-sandbox-windows-acl");
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!(
+            "bundled dsh is incomplete: missing {} (e.g. `{}`) under {}. \
+             The sidecar cannot boot with a partial dependency tree. Reinstall DeepLab \
+             or re-run scripts/dev/fetch-dsh.sh before launching.",
+            missing.len(),
+            missing[0],
+            dsh_dir.display()
+        ));
+    }
+    Ok(())
+}
+
+fn has_file_under(dir: &Path, suffix: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if has_file_under(&path, suffix) {
+                return true;
+            }
+        } else if path.file_name().is_some_and(|n| n.to_string_lossy().ends_with(suffix)) {
+            return true;
+        }
+    }
+    false
+}
+
 fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, String> {
     let root = runtime_root(app)?;
     let cfg = root.join("xdg-config");
@@ -1131,6 +1187,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
         .path()
         .resolve("dsh", tauri::path::BaseDirectory::Resource)
         .map_err(|e| format!("dsh resource not found: {e}"))?;
+    verify_dsh_bundle(&dsh_dir)?;
     // current_dir is the bundled dsh resource below, so a relative entry point
     // avoids Windows command-line path rewriting while remaining deterministic.
     let cli = "node_modules/@deepseek-ai/dsh/lib/bin.js";

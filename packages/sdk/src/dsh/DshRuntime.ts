@@ -155,6 +155,12 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
     string,
     { sessionId: string; approvalId: string; tool: string; reason?: string }
   >();
+  /** callId → start facts, so the completion `tool.updated` can carry the name,
+   *  parsed input, and startedAt that dsh's `tool/result` frame does not echo. */
+  private readonly runningToolNames = new Map<
+    string,
+    { name: string; input?: Record<string, unknown>; startedAt?: number }
+  >();
   /**
    * Accumulated streamed text/reasoning per part key (sessionId:partId). dsh
    * emits each `*-delta` chunk with only the INCREMENTAL text; the frontend
@@ -486,14 +492,22 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
       case "tool/call": {
         const data = event.data as { callId?: string; name?: string; arguments?: string; time?: number };
         if (!data?.callId || !data.name) break;
+        const startedMs =
+          typeof data.time === "number"
+            ? data.time
+            : typeof event.time === "number"
+              ? event.time
+              : undefined;
+        const input = parseArguments(data.arguments ?? "{}");
+        this.runningToolNames.set(data.callId, { name: data.name, input, startedAt: startedMs });
         this.emit({
           type: "tool.updated",
           sessionId,
           callId: data.callId,
           tool: data.name,
           status: "running",
-          input: parseArguments(data.arguments ?? "{}"),
-          startedAt: data.time ?? event.time * 1000,
+          input,
+          startedAt: startedMs,
         });
         break;
       }
@@ -514,14 +528,18 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         )?.toolCallId;
         const callId = data?.callId ?? data?.message?.toolCallId ?? data?.message?.source?.callId ?? contentCallId;
         if (!callId) break;
+        const start = this.runningToolNames.get(callId);
+        this.runningToolNames.delete(callId);
         this.emit({
           type: "tool.updated",
           sessionId,
           callId,
-          tool: "",
+          tool: start?.name ?? "",
           status: data?.message?.isError ? "failed" : "success",
+          input: start?.input,
+          startedAt: start?.startedAt,
           output: toolOutput(data?.message?.content),
-          endedAt: event.time * 1000,
+          endedAt: typeof event.time === "number" ? event.time : undefined,
         });
         break;
       }

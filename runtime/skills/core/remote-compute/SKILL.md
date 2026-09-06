@@ -192,7 +192,7 @@ python "$XDG_CONFIG_HOME/opencode/skills/remote-compute/record_run.py" \
   --code run.sh --code <each other script> \
   --output "$RESULT"/<each output file> \
   --env-file "$RESULT"/env.txt \
-  --session-id "$(cat .openlab/session.txt 2>/dev/null)"
+  --session-id "$(cat .deeplab/session.txt 2>/dev/null)"
 ```
 
 The helper warns if a recorded file is missing or if code/outputs are empty —

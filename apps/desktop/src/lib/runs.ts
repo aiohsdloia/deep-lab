@@ -9,6 +9,11 @@ import type { ToolUpdatedEvent } from "@deeplab/sdk";
 import { isTauri, logDebug } from "./tauri";
 import { isGatewayWeb, gatewayGet } from "./webMode";
 
+/** Tool names that execute a shell command. dsh names the shell tool by the
+ *  platform's shell (bash on unix, pwsh on Windows); all of them can run code,
+ *  so all of them are run candidates. */
+const SHELL_TOOL_NAMES = new Set(["bash", "pwsh", "sh", "cmd", "powershell"]);
+
 /** The compute surface a run targeted. Only "local" runs produce workspace
  *  files we can hash; remote surfaces are recorded honestly with their command
  *  and the submitting machine's env, but their outputs live elsewhere. */
@@ -149,7 +154,7 @@ export function looksLikeExecution(command: string): boolean {
  * no command, or a read-only/housekeeping command).
  */
 export function runInputFromEvent(event: ToolUpdatedEvent): RunInput | null {
-  if ((event.tool ?? "").toLowerCase() !== "bash") return null;
+  if (!SHELL_TOOL_NAMES.has((event.tool ?? "").toLowerCase())) return null;
   if (event.status !== "success" && event.status !== "failed") return null;
   const command = typeof event.input?.command === "string" ? event.input.command.trim() : "";
   if (!command) return null;

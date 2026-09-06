@@ -32,4 +32,13 @@ EOF
 rm -rf "$DIR/node_modules"
 (cd "$DIR" && npm install --no-save --no-package-lock --install-strategy=nested)
 
+# Self-check: fail loudly if the install produced a partial dependency tree
+# (an incomplete copy boots far enough to open windows, then the sidecar crashes
+# with a Cordis loader error). Catches it at fetch time instead.
+node scripts/dev/check-dsh-bundle.mjs --root "$DIR" --min-files 1
+if [ $? -ne 0 ]; then
+  echo "error: dsh ${DSH_VERSION} failed bundle integrity verification under ${DIR}/" >&2
+  exit 1
+fi
+
 echo "done: dsh ${DSH_VERSION} installed at ${DIR}/node_modules/@deepseek-ai/dsh"

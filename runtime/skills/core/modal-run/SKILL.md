@@ -87,7 +87,7 @@ python "$XDG_CONFIG_HOME/opencode/skills/modal-run/record_run.py" \
   --hardware "<the gpu= from @app.function, e.g. A10G — or 'CPU'>" \
   --code compute.py --output "$RESULT"/modal_result.txt \
   --output "$RESULT"/<each downloaded file> \
-  --session-id "$(cat .openlab/session.txt 2>/dev/null)"
+  --session-id "$(cat .deeplab/session.txt 2>/dev/null)"
 ```
 
 `--session-id` attaches the run to this session (empty-safe if the marker's absent).
