@@ -44,6 +44,7 @@
 
 ### B5 外围与清理(部分)
 - [x] 可见品牌残留:webview title / model-probe UA / gateway health tag → DeepLab(2026-09-06)
+- [x] 死脚手架:移除 src 下 26 个空占位 `.gitkeep`(features/占位组件/lib 空层)
 - [ ] gateway 手机端回归
 - [ ] i18n:新功能无硬编码用户文本
 - [ ] 技能管理 UI;实验室 OpenAI-compatible provider 端到端(model-agnostic)
