@@ -11,6 +11,19 @@
 - 科研管线无头端到端 + 子代理分派保真(2026-09-02)
 - dsh 捆绑完整性护栏(启动预检 + fetch 自检 + CLI 检查)
 
+## 对齐收口(源自 `OPENLAB-ALIGNMENT.md`,2026-09-06)
+### 实证类(需实验室环境/连接器或应用内演示)
+- [ ] notebook 真 kernel(.ipynb/Python/R,uv Jupyter)执行+重连
+- [ ] browser control(自有 Chrome/私有浏览器)闭环
+- [ ] 科学 MCP connectors 目录逐一对齐(arXiv/PubMed/Materials/weather…)
+- [ ] 实验室 OpenAI-compatible provider 端到端(含视觉服务)
+- [ ] 手机端 gateway 回归;E-ink/主题/分屏回归
+### 代码/打磨类(可独立做)
+- [ ] usage 跨会话/按 provider-model 聚合视图
+- [ ] NSIS 安装包:修剪/短路径方案(P0 已试:makensis MAX_PATH 卡深路径)
+- [ ] 会话 restore/export 语义显式化(不假装)
+- [ ] 全量回归在每次发版前过一遍
+
 ## 板块与勾选
 
 ### B1 研究管线产品化 ✅(2026-09-05 应用内 PASS 4/4)
