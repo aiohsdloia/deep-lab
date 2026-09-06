@@ -1081,12 +1081,9 @@ where
     });
 }
 
-/// Sentinel modules whose absence makes the bundled dsh fail deep inside the
-/// Cordis loader with a stack trace, long after the window is already open.
-/// These paths were the exact modules missing in the 2026-09-02 half-copied
-/// Windows bundle (the whale host opened blank; the sidecar only then crashed
-/// with `Cannot find module './detect-resources'` / `Cannot find the native
-/// Koffi module`). Checking them before spawning turns that into one clear error.
+/// Sentinel check: a half-copied dsh tree boots far enough to open windows,
+/// then the sidecar crashes with a stack trace (missing './detect-resources',
+/// koffi native binding). Catch it before spawning with one clear error.
 fn verify_dsh_bundle(dsh_dir: &Path) -> Result<(), String> {
     let canaries = [
         "node_modules/@deepseek-ai/dsh/lib/bin.js",
@@ -1137,6 +1134,77 @@ fn has_file_under(dir: &Path, suffix: &str) -> bool {
     false
 }
 
+const SIDECAR_OK_MARKER: &str = ".deeplab-dsh-ok";
+
+/// Where the sidecar's Node tree runs from. Preferred: an extracted copy under
+/// the app-private runtime root (kept shallow for installers that embed dsh as a
+/// single zip). Falls back to the bundled `dsh` resource dir that older
+/// installs and development builds still ship, so nothing existing breaks.
+fn ensure_sidecar_runtime(app: &AppHandle) -> Result<PathBuf, String> {
+    let root = runtime_root(app)?;
+    let target = root.join("sidecar-dsh");
+    let sentinel = target.join("node_modules/@deepseek-ai/dsh/lib/bin.js");
+    let ok = target.join(SIDECAR_OK_MARKER);
+    if sentinel.is_file() && ok.is_file() {
+        return Ok(target);
+    }
+
+    let zip = app
+        .path()
+        .resolve("dsh.zip", tauri::path::BaseDirectory::Resource)
+        .ok();
+    if zip.as_ref().is_some_and(|p| p.is_file()) {
+        let _ = std::fs::remove_dir_all(&target);
+        std::fs::create_dir_all(&target).map_err(|e| format!("create sidecar dir: {e}"))?;
+        let zip = zip.unwrap();
+        let output = extract_archive(&zip, &target).map_err(|e| {
+            format!("could not extract bundled dsh ({zip:?}): {e}")
+        })?;
+        if !output.status.success() {
+            return Err(format!(
+                "bundled dsh extraction failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        if !sentinel.is_file() {
+            return Err("bundled dsh extraction produced no runnable sidecar".into());
+        }
+        std::fs::write(&ok, "ok").ok();
+        return Ok(target);
+    }
+
+    app.path()
+        .resolve("dsh", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("bundled dsh resource not found (dsh.zip or dsh): {e}"))
+}
+
+fn extract_archive(zip: &Path, dest: &Path) -> Result<std::process::Output, String> {
+    use std::process::Command;
+    if cfg!(windows) {
+        Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Expand-Archive -LiteralPath",
+            ])
+            .arg(zip)
+            .args(["-DestinationPath"])
+            .arg(dest)
+            .arg("-Force")
+            .output()
+            .map_err(|e| e.to_string())
+    } else {
+        Command::new("unzip")
+            .arg("-o")
+            .arg(zip)
+            .arg("-d")
+            .arg(dest)
+            .output()
+            .map_err(|e| e.to_string())
+    }
+}
+
 fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, String> {
     let root = runtime_root(app)?;
     let cfg = root.join("xdg-config");
@@ -1145,7 +1213,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     let state = root.join("xdg-state");
     let dsh_home = root.join("dsh-home");
     // Require a resolvable user-facing workspace (the sidecar's current_dir is
-    // the bundled dsh resource, not the app cwd — which is `/` when launched
+    // the bundled dsh runtime dir, not the app cwd — which is `/` when launched
     // from Finder).
     let _workspace = workspace_dir(app)?;
     for d in [&cfg, &data, &cache, &state, &dsh_home, &dsh_home.join("agents")] {
@@ -1183,10 +1251,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<std::process::Child, Stri
     // up — observed as `timed out waiting for the dsh sidecar to listen`. Spawn
     // the CLI directly with current_dir already set to the resource dir, which
     // achieves the same anchor without the wrapper's fork.
-    let dsh_dir = app
-        .path()
-        .resolve("dsh", tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("dsh resource not found: {e}"))?;
+    let dsh_dir = ensure_sidecar_runtime(app)?;
     verify_dsh_bundle(&dsh_dir)?;
     // current_dir is the bundled dsh resource below, so a relative entry point
     // avoids Windows command-line path rewriting while remaining deterministic.
