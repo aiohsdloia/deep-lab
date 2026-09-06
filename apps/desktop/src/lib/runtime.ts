@@ -67,6 +67,7 @@ import { provenanceInputsFromEvent, recordProvenance } from "./provenance";
 import { clearResolvedPaths } from "./artifactFile";
 import { imageAttachmentParts } from "./promptAttachments";
 import { recordRun, runInputFromEvent } from "./runs";
+import { accumulateUsage, EMPTY_TOTALS, type UsageTotals } from "./usage";
 import { splitReview } from "./review";
 import { useSshStore } from "./ssh";
 import {
@@ -404,6 +405,8 @@ interface RuntimeState {
    *  config switch (the model is sent per-turn), so switching one pane's model
    *  never changes the others. In-memory. */
   sessionModels: Record<string, string>;
+  /** Live per-session token usage totals, accumulated from `usage.updated`. */
+  usageBySession: Record<string, UsageTotals>;
   /** Per-session reasoning-effort override; absent = the global
    *  `reasoningVariant`. */
   sessionVariants: Record<string, string | null>;
@@ -1935,6 +1938,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   sessions: [],
   currentId: null,
   threads: {},
+  usageBySession: {},
   skills: [],
   agents: [],
   agentModels: {},
@@ -2476,13 +2480,26 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
         !(event.type === "tool.updated" && event.status === "running")
       )
         void logDebug(
-          `event ← ${event.type}${"sessionId" in event ? " " + event.sessionId : ""}` +
+          `event �?${event.type}${"sessionId" in event ? " " + event.sessionId : ""}` +
             // An error's TEXT is the whole diagnostic value; logging only "error"
             // meant a real report ("Request blocked." on every retry) could not be
             // explained without reading the runtime's SQLite by hand. Redacted and
             // capped: a provider echoing a credential back must not land on disk.
             (event.type === "error" ? `: ${redactForLog(event.message)}` : ""),
         );
+      // Per-message token usage → per-session totals (in-memory, live only).
+      if (event.type === "usage.updated") {
+        const sid = event.sessionId;
+        if (sid) {
+          set((state) => ({
+            usageBySession: {
+              ...state.usageBySession,
+              [sid]: accumulateUsage(state.usageBySession[sid] ?? EMPTY_TOTALS, event.usage),
+            },
+          }));
+        }
+        return;
+      }
       if (
         "sessionId" in event &&
         event.sessionId &&

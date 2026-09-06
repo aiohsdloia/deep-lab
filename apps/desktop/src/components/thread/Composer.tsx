@@ -45,6 +45,7 @@ import {
   walkWorkspace,
 } from "@/components/thread/references";
 import { ModelPicker } from "@/components/thread/ModelPicker";
+import { UsagePill } from "@/components/thread/UsagePill";
 import { WorkspaceChip } from "@/components/thread/WorkspaceChip";
 import { useUiStore } from "@/lib/store";
 import { parkDraft, unparkDraft, type ComposerDraft } from "@/lib/composerStash";
@@ -1147,6 +1148,7 @@ export function Composer({
             unit) so the send button is always reachable on a narrow pane. */}
         <div className="ml-auto flex min-w-0 items-center gap-1.5">
           {showModelPicker && <ModelPicker sessionId={modelSessionId} compact={compactToolbar} />}
+          {showModelPicker && <UsagePill sessionId={modelSessionId} />}
           {/* Submit the current input to the session's queue instead of sending
               it now — runs after the current turn completes. Always available
               while the agent works. */}

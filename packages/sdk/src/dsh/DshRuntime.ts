@@ -97,6 +97,23 @@ function parseArguments(args: string): Record<string, unknown> | undefined {
   }
 }
 
+function fin(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined;
+}
+
+function assistantUsage(data: { usage?: Record<string, unknown> } | undefined) {
+  const u = data?.usage;
+  if (!u || typeof u !== "object") return undefined;
+  const input = fin(u.inputTokens) ?? fin(u.promptTokens);
+  const cache = fin(u.cacheReadTokens) ?? fin(u.promptCacheHitTokens);
+  const output = fin(u.outputTokens) ?? fin(u.completionTokens);
+  const reasoning = fin(u.reasoningTokens);
+  if (input === undefined && cache === undefined && output === undefined && reasoning === undefined) {
+    return undefined;
+  }
+  return { inputTokens: input ?? 0, cacheReadTokens: cache ?? 0, outputTokens: output ?? 0, reasoningTokens: reasoning ?? 0 };
+}
+
 /** Join a tool result's content blocks into one display string. */
 /** Collect every text leaf under a content-block tree. dsh nests tool output:
  *  `message.content` holds `{ type: "tool-result", content: [{ type: "text",
@@ -486,6 +503,10 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
               input: parseArguments(block.arguments ?? "{}"),
             });
           }
+        }
+        const usage = assistantUsage(event.data as { usage?: Record<string, unknown> | undefined });
+        if (usage) {
+          this.emit({ type: "usage.updated", sessionId, usage });
         }
         break;
       }

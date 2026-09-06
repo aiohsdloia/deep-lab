@@ -159,6 +159,28 @@ describe("DshRuntime chunk folding partIds", () => {
     expect(done?.startedAt).toBe(1_700_000_000_000);
     expect(done?.endedAt).toBe(1_700_000_001_000);
   });
+
+  it("surfaces token usage attached to assistant messages", () => {
+    const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+    const seen: Array<{ usage: unknown }> = [];
+    rt.onEvent((e: RuntimeEvent) => {
+      if (e.type === "usage.updated") seen.push({ usage: e.usage });
+    });
+    const fold = (e: unknown) =>
+      (rt as unknown as { foldSessionEvent: (sid: string, e: unknown) => void }).foldSessionEvent("s1", e);
+    fold({
+      type: "assistant/message",
+      data: {
+        message: { content: [{ type: "text", text: "hi" }] },
+        usage: { inputTokens: 11_000, cacheReadTokens: 20, outputTokens: 300, reasoningTokens: 40 },
+      },
+    });
+    expect(seen).toEqual([
+      { usage: { inputTokens: 11_000, cacheReadTokens: 20, outputTokens: 300, reasoningTokens: 40 } },
+    ]);
+    fold({ type: "assistant/message", data: { message: { content: [{ type: "text", text: "no usage" }] } } });
+    expect(seen.length).toBe(1);
+  });
 });
 
 describe("DshRuntime approval folding", () => {

@@ -30,10 +30,11 @@
 - [x] M1 结论:全局 memory 唯一文件 = `dsh-home/MEMORY.md`(UI 读写/instructions 注入/种子同一绝对路径;`/profile/MEMORY.md` 仅测试示例),项目=工作区 `AGENTS.md` → 每层单写入方,无第二源
 - [x] T1 remote-runs 合并:改好的 `record_run.py` 已真实写入 `.deeplab/remote-runs.jsonl`,Rust `read_runs` 合并两文件(真 SSH 运行仍属环境门控)
 
-### B3 科研资产链
-- [ ] notebook + kernel(Python/R)本地真执行、重连、产物预览
-- [ ] reviewer / domain-check 接 dsh 调用
-- [ ] usage / 成本通用聚合(provider·model·session)
+### B3 科研资产链(进行中:审计完成)
+- [x] 就绪度审计:`docs/migration/B3-ASSETS-AUDIT.md`(usage 缺通用聚合;notebook 环境门控;reviewer/domain-check 已可用)
+- [~] usage 通用聚合:核心 `lib/usage.ts` + SDK `usage.updated` 上浮完成(13 tests);剩 store 累加 + 每会话 UI 展示
+- [ ] notebook 真 kernel 闭环(实证,环境)
+- [ ] reviewer↔artifact 关联演示
 
 ### B4 连接器实环境
 - [ ] MCP / Jupyter / browser connector 实环境闭环

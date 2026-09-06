@@ -115,6 +115,18 @@ export interface SessionIdleEvent {
   type: "session.idle";
   sessionId: string;
 }
+/** Token usage for one assistant message (dsh attaches it to the message). */
+export interface UsageSnapshot {
+  inputTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+}
+export interface UsageUpdatedEvent {
+  type: "usage.updated";
+  sessionId: string;
+  usage: UsageSnapshot;
+}
 /** The runtime auto-named the session (dsh appends a `session/title` event after
  *  the first turn) — the app renames the sidebar row to match. */
 export interface SessionRenamedEvent {
@@ -247,6 +259,7 @@ export type RuntimeEvent =
   | CompactedEvent
   | StepUpdatedEvent
   | ToolUpdatedEvent
+  | UsageUpdatedEvent
   | SessionIdleEvent
   | SessionRenamedEvent
   | SessionAddedEvent
