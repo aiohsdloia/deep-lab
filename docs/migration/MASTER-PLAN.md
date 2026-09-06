@@ -20,7 +20,7 @@
 - [ ] 手机端 gateway 回归;E-ink/主题/分屏回归
 ### 代码/打磨类(可独立做)
 - [ ] usage 跨会话/按 provider-model 聚合视图
-- [ ] NSIS 安装包:修剪/短路径方案(P0 已试:makensis MAX_PATH 卡深路径)
+- [ ] NSIS 安装包(spike 结论 2026-09-06:修剪后仍 9469 文件 >250 字符、最深 ~493,方案改为“dsh 单 zip 嵌入 + 首启解压到 app 私有目录”)
 - [x] 会话 restore/export 语义显式化(`docs/migration/SESSION-SEMANTICS.md`:archive≈删除、可重新 attach、revert→fork、队列=本地草稿、无 jobs/plan 伪造)
 - [ ] 全量回归在每次发版前过一遍
 
