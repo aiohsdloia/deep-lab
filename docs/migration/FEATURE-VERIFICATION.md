@@ -9,7 +9,7 @@
 | 功能 | 现状 | 验证方式(应用内,~1-3 分钟/条) | 状态 |
 |---|---|---|---|
 | Notebook 本地执行 | UI/代码在,真 kernel 未实证 | 建/开一个 `.ipynb`,跑一个 Python cell(如 `2+2`),看输出与内核状态 | ✅ 2026-09-07 应用内:输出 4、无报错(基础执行通过;重连/长会话后续可选) |
-| 浏览器控制 | skill/browser-plugin 在 | 应用内“用 open-science-browser 打开 example.com” | 🟢 2026-09-07 通过:修复租约注入、Windows 首次启动管道继承、响应超时回收和无副作用库存探测;源码 harness、故障注入、构建产物及两个安装位置均完成真实浏览器打开/读标题/查库存/关闭验收 |
+| 浏览器控制 | skill/browser-plugin 在 | 应用内“用 open-science-browser 打开 example.com” | 🟢 2026-09-07 通过:修复租约注入、Windows 首次启动管道继承、响应超时回收、无副作用库存探测及旧凭据文档的运行参数恢复;两次真实 DeepSeek 会话(含人为删除参数后重启)均调用 inventory/open/get-title/close/inventory,读取 `Example Domain` 并确认 `browserOpen:false` |
 | 科学 MCP 连接器 | 7 个连接器 UI 在 | 在设置启用某连接器后,让 agent“用 arxiv 搜 xxx” | 待应用内(+需连接器可用) |
 | 实验室端点 | 可配 provider | 配一个 OpenAI-compatible 端点后跑一条对话 | 需真实 lab 端点(或本地 mock) |
 | 手机/网关回归 | 能力保留 | (可选)手机宽度浏览器打开网关 URL | 可选,暂缓 |

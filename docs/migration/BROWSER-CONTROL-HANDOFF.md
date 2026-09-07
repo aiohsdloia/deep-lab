@@ -2,13 +2,19 @@
 
 > **RESOLVED 2026-09-07.** The deployed Windows build now passes real-browser
 > open, inventory, follow-up title read, and close acceptance. The remaining
-> causes were concrete proxy defects: the fallback lease was checked but not
-> forwarded; agent-browser 0.32.1's first Windows daemon inherited MCP capture
-> handles and prevented EOF; session-list represented daemon state rather than
-> browser state; and a stalled backend had no bounded response/reap path.
+> causes crossed both wrapper and proxy boundaries: an older persisted MCP row
+> referenced three browser runtime parameters that were absent from dsh's
+> credential document, so the wrapper exited before registering any tools; the
+> fallback lease was checked but not forwarded; agent-browser 0.32.1's first
+> Windows daemon inherited MCP capture handles and prevented EOF; session-list
+> represented daemon state rather than browser state; and a stalled backend had
+> no bounded response/reap path.
 > `browser_mcp_proxy.rs` now assigns the lease before every tool call, performs
 > first-open bootstrap outside MCP pipes on Windows, probes `session info`, and
 > returns a correlated error within 30 seconds while killing the failed child.
+> The credential wrapper also recovers the three app-owned, non-secret browser
+> parameters when upgrading a stale row; secrets and user-specific values remain
+> fail-closed.
 > Regression coverage lives in `scripts/dev/test-browser-proxy.ps1` and its
 > source/failure/real-browser fixtures. The historical investigation below is
 > retained as evidence, not as current status.

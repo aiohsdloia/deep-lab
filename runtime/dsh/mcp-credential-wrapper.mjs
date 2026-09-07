@@ -64,9 +64,24 @@ delete env.DEEPLAB_MCP_CREDENTIAL_REFS;
 // (private-browser mode lets agent-browser use its own bundled/selected
 // browser), and private mode legitimately never configures that credential.
 const OPTIONAL_REFS = new Set(["AGENT_BROWSER_EXECUTABLE_PATH"]);
+// Browser control versions installed before the managed-credential migration
+// could retain these references in dsh-mcp.json without matching values in the
+// credential document. Their presence in the reference list records the user's
+// choice, and each value has one app-owned, non-secret interpretation. Recover
+// those old rows instead of dropping the entire MCP tool catalog at startup.
+const RECOVERABLE_REFS = new Map([
+  ["AGENT_BROWSER_NAMESPACE", "open-science-desktop"],
+  ["AGENT_BROWSER_IDLE_TIMEOUT_MS", "600000"],
+  ["AGENT_BROWSER_HEADED", "true"],
+]);
 for (const ref of refs) {
   const value = document.refs[ref];
   if (typeof value !== "string" || value.length === 0) {
+    const fallback = RECOVERABLE_REFS.get(ref);
+    if (fallback !== undefined) {
+      env[ref] = fallback;
+      continue;
+    }
     if (OPTIONAL_REFS.has(ref)) continue;
     console.error(`[deeplab-mcp] required credential ${ref} is not configured`);
     process.exit(1);

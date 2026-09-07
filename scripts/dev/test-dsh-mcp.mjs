@@ -80,6 +80,39 @@ test("fails without printing a missing credential value", async () => {
   }
 });
 
+test("recovers app-owned browser parameters from a stale credential document", async () => {
+  const home = await mkdtemp(join(tmpdir(), "deeplab-mcp-wrapper-"));
+  try {
+    await writeFile(join(home, ".credentials.yaml"), '{"version":1,"refs":{}}');
+    const result = await run(
+      process.execPath,
+      [
+        wrapper,
+        "--",
+        process.execPath,
+        "-e",
+        "process.stdout.write(JSON.stringify({ namespace: process.env.AGENT_BROWSER_NAMESPACE, idle: process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS, headed: process.env.AGENT_BROWSER_HEADED }))",
+      ],
+      {
+        ...process.env,
+        DSH_HOME: home,
+        DEEPLAB_MCP_CREDENTIAL_REFS:
+          '["AGENT_BROWSER_NAMESPACE","AGENT_BROWSER_IDLE_TIMEOUT_MS","AGENT_BROWSER_HEADED"]',
+      },
+    );
+
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      namespace: "open-science-desktop",
+      idle: "600000",
+      headed: "true",
+    });
+    assert.equal(result.stderr, "");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("the pinned dsh CLI accepts DeepLab's MCP Cordis patch shape", async () => {
   const home = await mkdtemp(join(tmpdir(), "deeplab-mcp-patch-"));
   try {
