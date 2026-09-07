@@ -20,8 +20,8 @@
 - [ ] 手机端 gateway 回归;E-ink/主题/分屏回归
 ### 代码/打磨类(可独立做)
 - [x] usage 跨会话/持久聚合:localStorage 累加(费用按模型,本地/实验室记 0)+ 历史页顶部合计行(919 通过)
-- [x] NSIS 安装包(zip-embed 打通):`build-windows-installer.ps1`(zip→切 conf→build→还原)产出 `DeepLab_1.0.2_x64-setup.exe`(93MB,SHA256 F58F…);运行端新增 `ensure_sidecar_runtime`(首启解压 dsh.zip)
-- [ ] 干净机全自动安装验收脚本(需安装运行验证首启解压)
+- [x] NSIS 安装包(zip-embed 打通):`build-windows-installer.ps1`(zip→切 conf→build→还原)产出 `DeepLab_1.0.2_x64-setup.exe`(93MB,SHA256 F58F…);运行端 `ensure_sidecar_runtime` 首启用 bsdtar 解压(~71s)
+- [x] 安装验收(本机):静默安装→首启解压 54568 文件→dsh ready(2026-09-07);干净机/他用户目录仍可再验
 - [x] 会话 restore/export 语义显式化(`docs/migration/SESSION-SEMANTICS.md`:archive≈删除、可重新 attach、revert→fork、队列=本地草稿、无 jobs/plan 伪造)
 - [ ] 全量回归在每次发版前过一遍
 

@@ -1134,8 +1134,6 @@ fn has_file_under(dir: &Path, suffix: &str) -> bool {
     false
 }
 
-const SIDECAR_OK_MARKER: &str = ".deeplab-dsh-ok";
-
 /// Where the sidecar's Node tree runs from. Preferred: an extracted copy under
 /// the app-private runtime root (kept shallow for installers that embed dsh as a
 /// single zip). Falls back to the bundled `dsh` resource dir that older
@@ -1144,8 +1142,10 @@ fn ensure_sidecar_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     let root = runtime_root(app)?;
     let target = root.join("sidecar-dsh");
     let sentinel = target.join("node_modules/@deepseek-ai/dsh/lib/bin.js");
-    let ok = target.join(SIDECAR_OK_MARKER);
-    if sentinel.is_file() && ok.is_file() {
+    // A valid extracted tree is ready to run (the sentinel is the proof; a
+    // side marker is unnecessary and can be lost by cleanup, which would then
+    // re-extract on every boot).
+    if sentinel.is_file() {
         return Ok(target);
     }
 
@@ -1169,7 +1169,6 @@ fn ensure_sidecar_runtime(app: &AppHandle) -> Result<PathBuf, String> {
         if !sentinel.is_file() {
             return Err("bundled dsh extraction produced no runnable sidecar".into());
         }
-        std::fs::write(&ok, "ok").ok();
         return Ok(target);
     }
 
@@ -1180,7 +1179,21 @@ fn ensure_sidecar_runtime(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn extract_archive(zip: &Path, dest: &Path) -> Result<std::process::Output, String> {
     use std::process::Command;
+    // Windows ships bsdtar (libarchive); it extracts zip archives far faster
+    // than PowerShell's Expand-Archive. Fall back to Expand-Archive if tar is
+    // unavailable or fails.
     if cfg!(windows) {
+        if let Ok(output) = Command::new("C:\\Windows\\System32\\tar.exe")
+            .args(["-xf"])
+            .arg(zip)
+            .args(["-C"])
+            .arg(dest)
+            .output()
+        {
+            if output.status.success() {
+                return Ok(output);
+            }
+        }
         Command::new("powershell")
             .args([
                 "-NoProfile",
