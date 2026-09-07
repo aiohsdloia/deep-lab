@@ -8,7 +8,7 @@
 
 | 功能 | 现状 | 验证方式(应用内,~1-3 分钟/条) | 状态 |
 |---|---|---|---|
-| Notebook 本地执行 | UI/代码在,真 kernel 未实证 | 建/开一个 `.ipynb`,跑一个 Python cell(如 `2+2`),看输出与内核状态 | 待应用内 |
+| Notebook 本地执行 | UI/代码在,真 kernel 未实证 | 建/开一个 `.ipynb`,跑一个 Python cell(如 `2+2`),看输出与内核状态 | ✅ 2026-09-07 应用内:输出 4、无报错(基础执行通过;重连/长会话后续可选) |
 | 浏览器控制 | skill/browser-plugin 在 | 发一条“用 open-science-browser 打开 example.com 并把标题告诉我” | 待应用内 |
 | 科学 MCP 连接器 | 7 个连接器 UI 在 | 在设置启用某连接器后,让 agent“用 arxiv 搜 xxx” | 待应用内(+需连接器可用) |
 | 实验室端点 | 可配 provider | 配一个 OpenAI-compatible 端点后跑一条对话 | 需真实 lab 端点(或本地 mock) |
