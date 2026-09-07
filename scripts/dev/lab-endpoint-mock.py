@@ -55,6 +55,27 @@ class Handler(BaseHTTPRequestHandler):
         msgs = payload.get("messages", [])
         question = "\n".join((m.get("content") or "") for m in msgs if isinstance(m, dict))
         text = answer(question)
+        if payload.get("stream"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+
+            def chunk(delta, finish):
+                obj = {
+                    "id": "mock-chat-1",
+                    "object": "chat.completion.chunk",
+                    "model": payload.get("model", MODEL),
+                    "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+                }
+                self.wfile.write(f"data: {json.dumps(obj)}\n\n".encode())
+
+            chunk({"role": "assistant", "content": ""}, None)
+            for piece in re.findall(r".{1,8}", text, flags=re.S):
+                chunk({"content": piece}, None)
+            chunk({}, "stop")
+            self.wfile.write(b"data: [DONE]\n\n")
+            return
         self._send(200, {
             "id": "mock-chat-1",
             "object": "chat.completion",
