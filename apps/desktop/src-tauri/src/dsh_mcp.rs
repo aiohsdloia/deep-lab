@@ -185,6 +185,15 @@ fn orphaned_refs(
         .collect()
 }
 
+/// A Windows path string safe to hand to Node as a script argument or env var.
+/// tauri's resource resolver can return verbatim `\\?\C:\...` paths; Node's
+/// module resolver then mis-parses the volume as `C:` and dies with EISDIR, so
+/// strip the extended-length prefix (these paths are well under MAX_PATH).
+fn plain_arg(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
+}
+
 fn render_patch(
     state: &StateFile,
     node: &str,
@@ -199,15 +208,15 @@ fn render_patch(
                 let (program, args, env) = if server.credential_refs.is_empty() {
                     (command[0].clone(), command[1..].to_vec(), None)
                 } else {
-                    let mut args = vec![wrapper.to_string_lossy().to_string(), "--".into()];
-                    args.extend(command.iter().cloned());
+                    let mut args = vec![plain_arg(wrapper), "--".into()];
+                    args.extend(command.iter().map(|a| Path::new(a)).map(|a| plain_arg(a)));
                     let refs = serde_json::to_string(&server.credential_refs)
                         .map_err(|e| e.to_string())?;
                     (
                         node.to_string(),
                         args,
                         Some(json!({
-                            "DSH_HOME": dsh_home.to_string_lossy(),
+                            "DSH_HOME": plain_arg(dsh_home),
                             CREDENTIAL_REFS_ENV: refs,
                         })),
                     )
