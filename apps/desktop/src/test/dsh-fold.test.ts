@@ -77,6 +77,69 @@ describe("DshRuntime chunk folding partIds", () => {
     expect(new Set(seen.map((e) => e.partId)).size).toBe(1);
   });
 
+  it("replaces streamed text with the final canonical message instead of duplicating it", () => {
+    const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+    const seen: Array<{ partId: string; text: string }> = [];
+    rt.onEvent((event) => {
+      if (event.type === "text.updated") seen.push({ partId: event.partId, text: event.text });
+    });
+    const fold = (event: unknown) =>
+      (rt as unknown as { foldSessionEvent: (sid: string, event: unknown) => void }).foldSessionEvent(
+        "s1",
+        event,
+      );
+
+    fold({
+      type: "assistant/chunk",
+      data: { turn: 1, step: 1, chunk: { type: "text-delta", index: 0, text: "3" } },
+    });
+    fold({
+      type: "assistant/message",
+      seq: 20,
+      data: { turn: 1, step: 1, message: { content: [{ type: "text", text: "3" }] } },
+    });
+
+    expect(seen).toEqual([
+      { partId: "text:1:1:0", text: "3" },
+      { partId: "text:1:1:0", text: "3" },
+    ]);
+  });
+
+  it("matches final text by content-block index across reasoning and tool blocks", () => {
+    const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
+    const seen: Array<{ partId: string; text: string }> = [];
+    rt.onEvent((event) => {
+      if (event.type === "text.updated") seen.push({ partId: event.partId, text: event.text });
+    });
+    const fold = (event: unknown) =>
+      (rt as unknown as { foldSessionEvent: (sid: string, event: unknown) => void }).foldSessionEvent(
+        "s1",
+        event,
+      );
+
+    fold({
+      type: "assistant/chunk",
+      data: { turn: 2, step: 3, chunk: { type: "text-delta", index: 2, text: "done" } },
+    });
+    fold({
+      type: "assistant/message",
+      seq: 40,
+      data: {
+        turn: 2,
+        step: 3,
+        message: {
+          content: [
+            { type: "reasoning", text: "checked" },
+            { type: "tool-call", id: "call-1", name: "read", arguments: "{}" },
+            { type: "text", text: "done" },
+          ],
+        },
+      },
+    });
+
+    expect(seen.map((event) => event.partId)).toEqual(["text:2:3:2", "text:2:3:2"]);
+  });
+
   it("surfaces nested tool output from dsh's tool/result event", () => {
     const rt = new DshRuntime({ baseUrl: "http://127.0.0.1:1" });
     const seen: Array<{

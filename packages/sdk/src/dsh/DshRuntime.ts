@@ -482,16 +482,31 @@ export class DshRuntime extends BaseAgentRuntime implements AgentRuntime {
         break;
       }
       case "assistant/message": {
-        const blocks = (event.data as { message?: { content?: ContentBlock[] } })?.message?.content ?? [];
+        const data = event.data as {
+          message?: { content?: ContentBlock[] };
+          turn?: number;
+          step?: number;
+        };
+        const blocks = data?.message?.content ?? [];
         let textParts = 0;
-        for (const block of blocks) {
+        for (const [blockIndex, block] of blocks.entries()) {
           if (block.type === "text" && typeof block.text === "string") {
+            // dsh emits both incremental assistant/chunk events and this final
+            // canonical message. Reuse the chunk's stable identity so the
+            // frontend replaces the streamed block instead of appending an
+            // identical second answer. The content-array index is the same
+            // block index used by chunks, including reasoning/tool blocks.
+            const streamedPart =
+              data.turn !== undefined && data.step !== undefined
+                ? `${data.turn}:${data.step}:${blockIndex}`
+                : undefined;
             this.emit({
               type: "text.updated",
               sessionId,
-              partId: `${event.seq}:final:${textParts}`,
+              partId: streamedPart ? `text:${streamedPart}` : `${event.seq}:final:${textParts}`,
               text: block.text,
             });
+            if (streamedPart) this.streamText.delete(`${sessionId}:text:${streamedPart}`);
             textParts += 1;
           } else if (block.type === "tool-call" && block.id && block.name) {
             this.emit({
