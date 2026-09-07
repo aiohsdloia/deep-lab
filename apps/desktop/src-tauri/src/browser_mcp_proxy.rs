@@ -1,6 +1,7 @@
 //! Ownership boundary for the bundled agent-browser MCP server.
 //!
-//! dsh supplies the current conversation identity through a trusted plugin.
+//! A trusted client may supply a conversation identity. Plain dsh MCP uses a
+//! proxy-lifetime lease; this is connection ownership, not a dsh session id.
 //! This proxy removes model-controlled lifecycle fields from the advertised
 //! schemas, blocks tools that can escape the current lease, and adds a private
 //! inventory view. The upstream MCP server still performs browser automation.
@@ -8,12 +9,36 @@
 use serde_json::{json, Value};
 use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 pub const PROXY_FLAG: &str = "--browser-mcp";
 const BROWSER_NAMESPACE: &str = "open-science-desktop";
 const LEASE_PREFIX: &str = "osd-";
 const INVENTORY_TOOL: &str = "agent_browser_inventory";
+// Finish before dsh's default 60s MCP deadline, including ownership probes.
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+const INSPECT_TIMEOUT: Duration = Duration::from_secs(8);
+
+struct ManagedChild(Child);
+
+impl Drop for ManagedChild {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn quiet_command(program: &std::ffi::OsStr) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    command
+}
 
 const APP_OWNED_ARGUMENTS: &[&str] = &[
     "allowedDomains",
@@ -61,23 +86,34 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
         return Err("missing agent-browser executable".to_string());
     }
     let agent_browser = args.remove(0);
-    let mut child = Command::new(&agent_browser)
-        .args(&args)
-        .env("AGENT_BROWSER_NAMESPACE", BROWSER_NAMESPACE)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|e| format!("could not start agent-browser: {e}"))?;
+    let mut child = ManagedChild(
+        quiet_command(&agent_browser)
+            .args(&args)
+            .env("AGENT_BROWSER_NAMESPACE", BROWSER_NAMESPACE)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| format!("could not start agent-browser: {e}"))?,
+    );
     let mut child_stdin = child
+        .0
         .stdin
         .take()
         .ok_or("agent-browser stdin unavailable")?;
     let child_stdout = child
+        .0
         .stdout
         .take()
         .ok_or("agent-browser stdout unavailable")?;
-    let mut child_stdout = BufReader::new(child_stdout);
+    let (responses_tx, responses) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(child_stdout).lines() {
+            if responses_tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
 
@@ -89,6 +125,7 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
         let mut request: Value =
             serde_json::from_str(&line).map_err(|e| format!("invalid MCP request JSON: {e}"))?;
         sanitize_tool_call(&mut request);
+        assign_lease(&mut request);
         let id = request.get("id").cloned();
         let method = request.get("method").and_then(Value::as_str);
 
@@ -106,19 +143,22 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
                 .pointer("/params/name")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
+            if BLOCKED_TOOLS.contains(&name) {
+                write_json_line(
+                    &mut stdout,
+                    &request_tool_result(
+                        &request,
+                        json!({ "error": "tool is outside this browser lease" }),
+                        true,
+                    ),
+                )?;
+                continue;
+            }
             if name != "agent_browser_tools_profiles" {
-                // The open-science-browser skill never passes a `session` — the
-                // DeepLab client normally injects the conversation lease. Over a
-                // plain dsh MCP bridge nothing injects it, so fall back to one
-                // process-wide lease (per proxy run) instead of rejecting every
-                // call. `agent-browser` still owns the actual browser namespace.
-                let lease_owned = request
+                let lease = request
                     .pointer("/params/arguments/session")
                     .and_then(Value::as_str)
-                    .filter(|value| valid_lease(value))
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(process_lease);
-                let lease = lease_owned.as_str();
+                    .ok_or("browser lease was not assigned")?;
                 let open = match browser_session_exists(&agent_browser, lease) {
                     Ok(open) => open,
                     Err(error) => {
@@ -150,6 +190,20 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
                 }
                 if !open {
                     if name == "agent_browser_open" {
+                        // agent-browser 0.32.1's Windows MCP run_cli waits for
+                        // pipe EOF after the CLI exits. Its first daemon can
+                        // inherit those handles and keep that wait alive.
+                        // Bootstrap only for an explicit open request, outside
+                        // the MCP capture pipes; navigation stays upstream MCP.
+                        #[cfg(windows)]
+                        if let Err(error) = bootstrap_browser(&agent_browser, lease) {
+                            let _ = close_browser_session(&agent_browser, lease);
+                            write_json_line(
+                                &mut stdout,
+                                &request_tool_result(&request, json!({ "error": error }), true),
+                            )?;
+                            continue;
+                        }
                         fresh_open_lease = Some(lease.to_string());
                     } else if name == "agent_browser_read" && has_url {
                         // An explicit read URL uses agent-browser's HTTP reader
@@ -190,14 +244,35 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
         // Notifications have no response. Requests are deliberately serialized:
         // agent-browser itself runs each CLI operation synchronously.
         let Some(id) = id else { continue };
+        let deadline = Instant::now() + RESPONSE_TIMEOUT;
         loop {
-            let mut response_line = String::new();
-            let read = child_stdout
-                .read_line(&mut response_line)
-                .map_err(|e| format!("could not read MCP response: {e}"))?;
-            if read == 0 {
-                return Err("agent-browser MCP exited unexpectedly".to_string());
-            }
+            let response_line =
+                match responses.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                    Ok(line) => line.map_err(|e| format!("could not read MCP response: {e}"))?,
+                    Err(error) => {
+                        let message = match error {
+                            mpsc::RecvTimeoutError::Timeout => {
+                                "agent-browser MCP response timed out; reconnect required"
+                            }
+                            mpsc::RecvTimeoutError::Disconnected => {
+                                "agent-browser MCP exited unexpectedly; reconnect required"
+                            }
+                        };
+                        write_json_line(
+                            &mut stdout,
+                            &json!({
+                                "jsonrpc": "2.0", "id": id,
+                                "error": { "code": -32000, "message": message }
+                            }),
+                        )?;
+                        if let Some(lease) = fresh_open_lease.as_deref() {
+                            let _ = close_browser_session(&agent_browser, lease);
+                        }
+                        // Drop kills/reaps the child even on this early return.
+                        // dsh's MCP supervisor reconnects instead of reusing a stuck stream.
+                        return Err(message.to_string());
+                    }
+                };
             let Ok(mut response) = serde_json::from_str::<Value>(response_line.trim()) else {
                 // Preserve any upstream non-JSON output for diagnostics without
                 // corrupting the JSON-RPC stream.
@@ -210,6 +285,7 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
                 protect_tool_list(&mut response, first_page);
             }
             if is_requested_response
+                && response.get("error").is_none()
                 && response.pointer("/result/isError") != Some(&json!(true))
                 && fresh_open_lease.is_some()
             {
@@ -226,6 +302,14 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
                     );
                 }
             }
+            if is_requested_response
+                && (response.get("error").is_some()
+                    || response.pointer("/result/isError") == Some(&json!(true)))
+            {
+                if let Some(lease) = fresh_open_lease.as_deref() {
+                    let _ = close_browser_session(&agent_browser, lease);
+                }
+            }
             write_json_line(&mut stdout, &response)?;
             if is_requested_response {
                 break;
@@ -233,9 +317,26 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
         }
     }
 
-    let _ = child.kill();
-    let _ = child.wait();
     Ok(())
+}
+
+fn assign_lease(request: &mut Value) {
+    if request.get("method").and_then(Value::as_str) != Some("tools/call") {
+        return;
+    }
+    let Some(params) = request.get_mut("params").and_then(Value::as_object_mut) else {
+        return;
+    };
+    let arguments = params.entry("arguments").or_insert_with(|| json!({}));
+    if let Some(arguments) = arguments.as_object_mut() {
+        let lease = arguments
+            .get("session")
+            .and_then(Value::as_str)
+            .filter(|value| valid_lease(value))
+            .map(str::to_owned)
+            .unwrap_or_else(process_lease);
+        arguments.insert("session".into(), json!(lease));
+    }
 }
 
 fn write_json_line(writer: &mut impl Write, value: &Value) -> Result<(), String> {
@@ -410,7 +511,7 @@ fn browser_inventory(agent_browser: &OsString, lease: &str) -> Result<Value, Str
         .pointer("/data/sessions")
         .and_then(Value::as_array)
         .ok_or("agent-browser returned an invalid session list")?;
-    let current_open = sessions.iter().any(|value| value.as_str() == Some(lease));
+    let current_open = browser_session_exists(agent_browser, lease)?;
     let mut other_conversations = 0usize;
     let mut legacy_app_sessions = 0usize;
     for session in sessions.iter().filter_map(Value::as_str) {
@@ -482,20 +583,28 @@ fn browser_inventory(agent_browser: &OsString, lease: &str) -> Result<Value, Str
 }
 
 fn browser_session_exists(agent_browser: &OsString, lease: &str) -> Result<bool, String> {
-    let sessions = run_agent_json(
+    // session list reports daemons, which can outlive their browser. tab list
+    // on a closed browser launches one, so only the non-launching info probe is
+    // allowed when deciding whether inventory should inspect tabs.
+    let info = run_agent_json(
         agent_browser,
         &[
             "--namespace",
             BROWSER_NAMESPACE,
+            "--session",
+            lease,
             "--json",
             "session",
-            "list",
+            "info",
         ],
     )?;
-    Ok(sessions
-        .pointer("/data/sessions")
-        .and_then(Value::as_array)
-        .is_some_and(|sessions| sessions.iter().any(|value| value.as_str() == Some(lease))))
+    if let Some(error) = info.pointer("/data/runtimeError").and_then(Value::as_str) {
+        return Err(format!("could not inspect browser state: {error}"));
+    }
+    Ok(info
+        .pointer("/data/runtime/browserLaunched")
+        .and_then(Value::as_bool)
+        == Some(true))
 }
 
 /// A copied Chrome login may contain its old "Sessions" files. On the first
@@ -564,25 +673,124 @@ fn close_browser_session(agent_browser: &OsString, lease: &str) -> Result<(), St
 }
 
 fn run_agent_json(agent_browser: &OsString, args: &[&str]) -> Result<Value, String> {
-    let output = Command::new(agent_browser)
-        .args(args)
-        .output()
-        .map_err(|e| format!("could not run agent-browser inventory: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    // Daemon descendants can inherit Windows pipe handles even after the CLI
+    // exits. Read completed command files without waiting for a daemon's EOF.
+    let capture = CommandCapture::new()?;
+    let mut child = ManagedChild(
+        quiet_command(agent_browser)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(std::fs::File::create(capture.0.join("stdout")).map_err(|e| e.to_string())?)
+            .stderr(std::fs::File::create(capture.0.join("stderr")).map_err(|e| e.to_string())?)
+            .spawn()
+            .map_err(|e| format!("could not run agent-browser inventory: {e}"))?,
+    );
+    let deadline = Instant::now() + INSPECT_TIMEOUT;
+    let status = loop {
+        if let Some(status) = child.0.try_wait().map_err(|e| e.to_string())? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            return Err("agent-browser inventory timed out".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let stdout = std::fs::read(capture.0.join("stdout")).map_err(|e| e.to_string())?;
+    let stderr = std::fs::read(capture.0.join("stderr")).map_err(|e| e.to_string())?;
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
         return Err(if stderr.is_empty() {
             "agent-browser inventory failed".to_string()
         } else {
             format!("agent-browser inventory failed: {stderr}")
         });
     }
-    serde_json::from_slice(&output.stdout)
+    serde_json::from_slice(&stdout)
         .map_err(|e| format!("invalid agent-browser inventory JSON: {e}"))
+}
+
+#[cfg(windows)]
+fn bootstrap_browser(agent_browser: &OsString, lease: &str) -> Result<(), String> {
+    run_agent_json(
+        agent_browser,
+        &[
+            "--namespace",
+            BROWSER_NAMESPACE,
+            "--session",
+            lease,
+            "--json",
+            "open",
+        ],
+    )
+    .map(|_| ())
+}
+
+struct CommandCapture(std::path::PathBuf);
+
+impl CommandCapture {
+    fn new() -> Result<Self, String> {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("deeplab-browser-{}-{id}", process_lease()));
+        std::fs::create_dir(&path).map_err(|e| e.to_string())?;
+        Ok(Self(path))
+    }
+}
+
+impl Drop for CommandCapture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.0.join("stdout"));
+        let _ = std::fs::remove_file(self.0.join("stderr"));
+        let _ = std::fs::remove_dir(&self.0);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inventory_and_forwarded_calls_share_the_same_fallback_lease() {
+        for name in [INVENTORY_TOOL, "agent_browser_open", "agent_browser_close"] {
+            let mut request = json!({"method":"tools/call", "params":{"name": name}});
+            assign_lease(&mut request);
+            assert_eq!(
+                request.pointer("/params/arguments/session"),
+                Some(&json!(process_lease()))
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_leases_are_replaced_and_trusted_leases_preserved() {
+        for supplied in ["other", "../escape", "osd-trusted"] {
+            let mut request = json!({"method":"tools/call", "params": {
+                "name":"agent_browser_open", "arguments":{"session":supplied, "url":"https://example.com"}
+            }});
+            assign_lease(&mut request);
+            let expected = if supplied == "osd-trusted" {
+                supplied.to_string()
+            } else {
+                process_lease()
+            };
+            assert_eq!(
+                request.pointer("/params/arguments/session"),
+                Some(&json!(expected))
+            );
+            assert_eq!(
+                request.pointer("/params/arguments/url"),
+                Some(&json!("https://example.com"))
+            );
+        }
+    }
+
+    #[test]
+    fn lease_assignment_does_not_modify_non_tool_requests() {
+        let mut request = json!({"method":"initialize", "params":{"protocolVersion":"2024-11-05"}});
+        let original = request.clone();
+        assign_lease(&mut request);
+        assert_eq!(request, original);
+    }
 
     #[test]
     fn tool_schema_hides_ownership_escape_hatches() {

@@ -14,7 +14,7 @@
 ## 对齐收口(源自 `OPENLAB-ALIGNMENT.md`,2026-09-06)
 ### 实证类(需实验室环境/连接器或应用内演示)
 - [ ] notebook 真 kernel 应用内执行+重连(`docs/migration/FEATURE-VERIFICATION.md`)
-- [ ] browser control 应用内(open-science-browser 打开网页并回报)
+- [x] browser control 应用内(open-science-browser 打开网页并回报)
 - [ ] 科学 MCP connectors 应用内(启用后让 agent 真取一次数)
 - [ ] 实验室 OpenAI-compatible provider 端到端(含视觉服务)
 - [ ] 手机端 gateway 回归(可选,能力保留不删)
@@ -52,7 +52,8 @@
 - [ ] reviewer↔artifact 关联演示
 
 ### B4 连接器实环境
-- [ ] MCP / Jupyter / browser connector 实环境闭环
+- [x] MCP / browser connector 实环境闭环
+- [ ] Jupyter connector 实环境闭环
 - [ ] remote compute(SSH / Slurm / Modal)实环境闭环
 - [ ] legacy `.openlab` 导入兼容(新写一律 `.deeplab`)
 - [ ] note:compute.json 仍全链 `.openlab`(刻意兼容,迁移时机另定;`record_run.py` 已迁 `.deeplab`)

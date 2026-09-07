@@ -1,4 +1,17 @@
-# 交接报告:浏览器控制(Browser Control / open-science-browser)未修复问题
+# 浏览器控制修复记录(Browser Control / open-science-browser)
+
+> **RESOLVED 2026-09-07.** The deployed Windows build now passes real-browser
+> open, inventory, follow-up title read, and close acceptance. The remaining
+> causes were concrete proxy defects: the fallback lease was checked but not
+> forwarded; agent-browser 0.32.1's first Windows daemon inherited MCP capture
+> handles and prevented EOF; session-list represented daemon state rather than
+> browser state; and a stalled backend had no bounded response/reap path.
+> `browser_mcp_proxy.rs` now assigns the lease before every tool call, performs
+> first-open bootstrap outside MCP pipes on Windows, probes `session info`, and
+> returns a correlated error within 30 seconds while killing the failed child.
+> Regression coverage lives in `scripts/dev/test-browser-proxy.ps1` and its
+> source/failure/real-browser fixtures. The historical investigation below is
+> retained as evidence, not as current status.
 
 > 给接手的模型/工程师。目标:修复「agent_browser_* MCP 工具在 DeepLab 会话里能用,
 > 但调用报错/超时」的最后一段。下面给足位置、现象、已修根因、证据与调试路径。
