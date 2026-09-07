@@ -59,9 +59,15 @@ if (
 
 const env = { ...process.env };
 delete env.DEEPLAB_MCP_CREDENTIAL_REFS;
+// Refs that a server may run without: missing values are skipped instead of
+// failing. The browser server works fine without AGENT_BROWSER_EXECUTABLE_PATH
+// (private-browser mode lets agent-browser use its own bundled/selected
+// browser), and private mode legitimately never configures that credential.
+const OPTIONAL_REFS = new Set(["AGENT_BROWSER_EXECUTABLE_PATH"]);
 for (const ref of refs) {
   const value = document.refs[ref];
   if (typeof value !== "string" || value.length === 0) {
+    if (OPTIONAL_REFS.has(ref)) continue;
     console.error(`[deeplab-mcp] required credential ${ref} is not configured`);
     process.exit(1);
   }
