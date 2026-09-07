@@ -13,11 +13,12 @@
 
 ## 对齐收口(源自 `OPENLAB-ALIGNMENT.md`,2026-09-06)
 ### 实证类(需实验室环境/连接器或应用内演示)
-- [ ] notebook 真 kernel(.ipynb/Python/R,uv Jupyter)执行+重连
-- [ ] browser control(自有 Chrome/私有浏览器)闭环
-- [ ] 科学 MCP connectors 目录逐一对齐(arXiv/PubMed/Materials/weather…)
+- [ ] notebook 真 kernel 应用内执行+重连(`docs/migration/FEATURE-VERIFICATION.md`)
+- [ ] browser control 应用内(open-science-browser 打开网页并回报)
+- [ ] 科学 MCP connectors 应用内(启用后让 agent 真取一次数)
 - [ ] 实验室 OpenAI-compatible provider 端到端(含视觉服务)
-- [ ] 手机端 gateway 回归;E-ink/主题/分屏回归
+- [ ] 手机端 gateway 回归(可选,能力保留不删)
+- [ ] E-ink/主题/分屏视觉回归(可选)
 ### 代码/打磨类(可独立做)
 - [x] usage 跨会话/持久聚合:localStorage 累加(费用按模型,本地/实验室记 0)+ 历史页顶部合计行(919 通过)
 - [x] NSIS 安装包(zip-embed 打通):`build-windows-installer.ps1`(zip→切 conf→build→还原)产出 `DeepLab_1.0.2_x64-setup.exe`(93MB,SHA256 F58F…);运行端 `ensure_sidecar_runtime` 首启用 bsdtar 解压(~71s)
