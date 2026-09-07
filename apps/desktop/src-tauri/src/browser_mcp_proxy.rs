@@ -107,20 +107,18 @@ fn run_inner(mut args: Vec<OsString>) -> Result<(), String> {
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             if name != "agent_browser_tools_profiles" {
-                let lease = request
+                // The open-science-browser skill never passes a `session` — the
+                // DeepLab client normally injects the conversation lease. Over a
+                // plain dsh MCP bridge nothing injects it, so fall back to one
+                // process-wide lease (per proxy run) instead of rejecting every
+                // call. `agent-browser` still owns the actual browser namespace.
+                let lease_owned = request
                     .pointer("/params/arguments/session")
-                    .and_then(Value::as_str);
-                let Some(lease) = lease.filter(|value| valid_lease(value)) else {
-                    write_json_line(
-                        &mut stdout,
-                        &request_tool_result(
-                            &request,
-                            json!({ "error": "trusted conversation lease was not supplied" }),
-                            true,
-                        ),
-                    )?;
-                    continue;
-                };
+                    .and_then(Value::as_str)
+                    .filter(|value| valid_lease(value))
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(process_lease);
+                let lease = lease_owned.as_str();
                 let open = match browser_session_exists(&agent_browser, lease) {
                     Ok(open) => open,
                     Err(error) => {
@@ -366,6 +364,23 @@ fn valid_lease(value: &str) -> bool {
         && value
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+}
+
+/// A lease to use when the calling client did not inject one (plain dsh MCP
+/// bridge). Stable for the life of this proxy process so repeated tool calls
+/// stay in one browser session.
+fn process_lease() -> String {
+    static LEASE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    LEASE
+        .get_or_init(|| {
+            let random: u64 = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0)
+                ^ std::process::id() as u64;
+            format!("osd-deeplab-{random:016x}")
+        })
+        .clone()
 }
 
 fn tool_response(id: Value, body: Value, is_error: bool) -> Value {
