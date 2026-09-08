@@ -23,6 +23,14 @@ gateway (the dsh client framework).
   <img src="https://img.shields.io/badge/runtime-DeepSeek%20Harness-success" alt="dsh runtime">
 </p>
 
+<p>
+  GitHub: <a href="https://github.com/aiohsdloia/deep-lab">aiohsdloia/deep-lab</a> ·
+  Gitee: <a href="https://gitee.com/yuchen-code/deep-lab">yuchen-code/deep-lab</a>
+</p>
+
+<p><b>Experimental</b>: built on the DeepSeek Harness (dsh), which is evolving
+quickly. Expect breaking changes between releases.</p>
+
 </div>
 
 ---
