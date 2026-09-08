@@ -7,6 +7,9 @@
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+const CONSTRAINTS_FILE: &str = "deeplab-constraints.txt";
+const PAPER_SEARCH_PACKAGE: &str = "paper-search-mcp";
+
 fn env_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app
         .path()
@@ -58,20 +61,43 @@ pub async fn setup_science_mcp(app: AppHandle, package: String) -> Result<String
     if !py.exists() {
         crate::uv::create_venv(&app, "science", &dir).await?;
     }
+
+    // paper-search-mcp 0.1.x imports `mcp.server.fastmcp`, which was removed in
+    // mcp 2.x. Its upstream metadata only declares `mcp>=1.6`, so an
+    // unconstrained install currently resolves to 2.x and the MCP process dies
+    // before registering any tools. Persist the compatibility bound for every
+    // later install into this shared env; a genuinely incompatible connector
+    // must fail installation instead of silently breaking literature search.
+    let constraints = dir.join(CONSTRAINTS_FILE);
+    if package_name(&package) == PAPER_SEARCH_PACKAGE {
+        std::fs::write(&constraints, "mcp<2\n").map_err(|e| e.to_string())?;
+    }
+
+    let mut args = vec![
+        "pip".into(),
+        "install".into(),
+        "--python".into(),
+        py.to_string_lossy().to_string(),
+    ];
+    if constraints.exists() {
+        args.extend([
+            "--constraint".into(),
+            constraints.to_string_lossy().to_string(),
+        ]);
+    }
+    args.push(package);
     crate::uv::run_uv(
         &app,
         "science",
-        vec![
-            "pip".into(),
-            "install".into(),
-            "--python".into(),
-            py.to_string_lossy().to_string(),
-            package,
-        ],
+        args,
         "uv pip install",
     )
     .await?;
     Ok(py.to_string_lossy().to_string())
+}
+
+fn package_name(package: &str) -> &str {
+    package.split_once("==").map(|(name, _)| name).unwrap_or(package)
 }
 
 /// A PyPI package name (letters/digits/._-), optionally pinned with `==<version>`.
@@ -86,7 +112,7 @@ fn is_safe_package(pkg: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_safe_package;
+    use super::{is_safe_package, package_name, PAPER_SEARCH_PACKAGE};
 
     #[test]
     fn accepts_real_package_names_and_pins() {
@@ -103,5 +129,11 @@ mod tests {
         assert!(!is_safe_package("pkg && echo"));
         assert!(!is_safe_package("pkg --index-url http://evil"));
         assert!(!is_safe_package("pkg\nother"));
+    }
+
+    #[test]
+    fn recognizes_pinned_paper_search_for_compatibility_constraints() {
+        assert_eq!(package_name("paper-search-mcp"), PAPER_SEARCH_PACKAGE);
+        assert_eq!(package_name("paper-search-mcp==0.1.4"), PAPER_SEARCH_PACKAGE);
     }
 }
